@@ -1,4 +1,4 @@
-# GitHub Copilot Instructions - Stardew Valley Cross Saves Tool
+# GitHub Copilot Instructions - Stardew Valley Cross-Save Tool
 
 ## Project Overview
 

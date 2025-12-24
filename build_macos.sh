@@ -5,7 +5,7 @@
 set -e  # Exit on error
 
 echo "=========================================="
-echo "  Stardew Valley Cross Saves Tool - Build macOS"
+echo "  Stardew Valley Cross-Save Tool - Build macOS"
 echo "=========================================="
 echo ""
 
@@ -25,13 +25,13 @@ echo "✓ Dependencies installed"
 # Clean previous builds
 echo ""
 echo "🧹 Cleaning previous builds..."
-rm -rf build dist "Stardew Valley Cross Saves Tool.pkg" "Stardew Valley Cross Saves Tool.spec"
+rm -rf build dist "Stardew Valley Cross-Save Tool.pkg" "Stardew Valley Cross-Save Tool.spec"
 
 # Build application
 echo ""
 echo "🔨 Building application..."
 pyinstaller --windowed \
-            --name "Stardew Valley Cross Saves Tool" \
+            --name "Stardew Valley Cross-Save Tool" \
             --add-data "assets:assets" \
             --icon "assets/logo.icns" \
             app.py --noconfirm
@@ -39,9 +39,9 @@ pyinstaller --windowed \
 # Create .pkg package
 echo ""
 echo "📦 Creating .pkg installer..."
-pkgbuild --component "dist/Stardew Valley Cross Saves Tool.app" \
+pkgbuild --component "dist/Stardew Valley Cross-Save Tool.app" \
          --install-location /Applications \
-         "Stardew Valley Cross Saves Tool.pkg"
+         "Stardew Valley Cross-Save Tool.pkg"
 
 echo ""
 echo "=========================================="

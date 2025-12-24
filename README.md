@@ -1,4 +1,4 @@
-# 🐔 Stardew Valley Cross Saves Tool
+# 🐔 Stardew Valley Cross-Save Tool
 
 A cross-platform GUI tool to sync your Stardew Valley save files across multiple devices using cloud storage (iCloud, OneDrive, Dropbox, etc.).
 
@@ -38,12 +38,12 @@ The tool creates a symbolic link (or junction on Windows) from your local Starde
 ### Option 1: Download Pre-Built Application
 
 **macOS:**
-1. Download `Stardew Valley Cross Saves Tool.pkg` from [Releases](../../releases)
+1. Download `Stardew Valley Cross-Save Tool.pkg` from [Releases](../../releases)
 2. Double-click to install
 3. Find the app in your Applications folder
 
 **Windows:**
-1. Download `Stardew Valley Cross Saves Tool.exe` from [Releases](../../releases)
+1. Download `Stardew Valley Cross-Save Tool.exe` from [Releases](../../releases)
 2. Run the executable
 3. No installation required
 
@@ -114,8 +114,8 @@ chmod +x build_macos.sh
 ```
 
 This creates:
-- `dist/Stardew Valley Cross Saves Tool.app` (application bundle)
-- `Stardew Valley Cross Saves Tool.pkg` (installer package)
+- `dist/Stardew Valley Cross-Save Tool.app` (application bundle)
+- `Stardew Valley Cross-Save Tool.pkg` (installer package)
 
 ### Windows
 
@@ -125,7 +125,7 @@ build_windows.bat
 ```
 
 This creates:
-- `dist/Stardew Valley Cross Saves Tool/Stardew Valley Cross Saves Tool.exe`
+- `dist/Stardew Valley Cross-Save Tool/Stardew Valley Cross-Save Tool.exe`
 
 For a professional installer, use [Inno Setup](https://jrsoftware.org/isinfo.php)
 

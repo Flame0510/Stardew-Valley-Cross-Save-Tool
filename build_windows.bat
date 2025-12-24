@@ -3,7 +3,7 @@ REM Build script for Windows
 REM Generates .exe application
 
 echo ==========================================
-echo   Stardew Valley Cross Saves Tool - Build Windows
+echo   Stardew Valley Cross-Save Tool - Build Windows
 echo ==========================================
 echo.
 
@@ -29,12 +29,12 @@ echo.
 echo [*] Cleaning previous builds...
 if exist build rmdir /s /q build
 if exist dist rmdir /s /q dist
-if exist "Stardew Valley Cross Saves Tool.spec" del "Stardew Valley Cross Saves Tool.spec"
+if exist "Stardew Valley Cross-Save Tool.spec" del "Stardew Valley Cross-Save Tool.spec"
 
 REM Build application
 echo.
 echo [*] Building application...
-pyinstaller --windowed --name "Stardew Valley Cross Saves Tool" --add-data "assets;assets" --icon "assets\logo.ico" app.py --noconfirm
+pyinstaller --windowed --name "Stardew Valley Cross-Save Tool" --add-data "assets;assets" --icon "assets\logo.ico" app.py --noconfirm
 
 echo.
 echo ==========================================
@@ -42,7 +42,7 @@ echo [OK] Build completed successfully!
 echo ==========================================
 echo.
 echo Generated file:
-echo   - dist\Stardew Valley Cross Saves Tool\Stardew Valley Cross Saves Tool.exe
+echo   - dist\Stardew Valley Cross-Save Tool\Stardew Valley Cross-Save Tool.exe
 echo.
 echo To create a professional installer (.exe), use Inno Setup:
 echo   https://jrsoftware.org/isinfo.php

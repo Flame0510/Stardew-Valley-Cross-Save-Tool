@@ -19,7 +19,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 from PIL import Image, ImageTk
 
-APP_TITLE = "Stardew Valley Cross Saves Tool"
+APP_TITLE = "Stardew Valley Cross-Save Tool"
 
 # Stardew Valley color palette
 COLORS = {
