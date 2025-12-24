@@ -2,7 +2,7 @@
 
 A cross-platform GUI tool to sync your Stardew Valley save files across multiple devices using cloud storage (iCloud, OneDrive, Dropbox, etc.).
 
-![Stardew Valley](assets/logo.png)
+![Stardew Valley](assets/screenshot.png)
 
 ## 📋 Features
 

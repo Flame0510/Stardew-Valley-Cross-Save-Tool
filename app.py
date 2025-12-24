@@ -95,14 +95,19 @@ def remove_path(p: Path):
 
 def create_symlink_dir(link_path: Path, target_path: Path):
     # link_path becomes a symlink pointing to target_path
-    os.symlink(str(target_path), str(link_path), target_is_directory=True)
+    try:
+        os.symlink(str(target_path), str(link_path), target_is_directory=True)
+    except OSError as e:
+        raise RuntimeError(f"Failed to create symlink: {e}")
 
 def create_junction_windows(link_path: Path, target_path: Path):
     # mklink /J "link" "target"
-    cmd = ["cmd", "/c", "mklink", "/J", str(link_path), str(target_path)]
+    # Quote paths to handle spaces
+    cmd = ["cmd", "/c", "mklink", "/J", f'"{link_path}"', f'"{target_path}"']
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0:
-        raise RuntimeError(r.stderr.strip() or r.stdout.strip() or "mklink failed")
+        error_msg = r.stderr.strip() or r.stdout.strip() or "mklink failed"
+        raise RuntimeError(f"Failed to create junction: {error_msg}")
 
 def copy_contents(src_dir: Path, dst_dir: Path, overwrite: bool = True):
     ensure_dir(str(dst_dir))
@@ -119,7 +124,7 @@ def copy_contents(src_dir: Path, dst_dir: Path, overwrite: bool = True):
             shutil.copy2(item, dst)
 
 def pretty_platform_hint() -> str:
-    if is_macos():
+    if is_macos(): 
         return "macOS: typical Saves = ~/Library/Application Support/StardewValley/Saves or ~/.config/StardewValley/Saves"
     if is_windows():
         return "Windows: typical Saves = %AppData%\\StardewValley\\Saves"
@@ -130,7 +135,7 @@ class App(tk.Tk):
         super().__init__()
         self.title(APP_TITLE)
         self.geometry("1000x800")
-        self.minsize(900, 700)  # Dimensione minima
+        self.minsize(900, 700)  # Minimum window size
         self.configure(bg=COLORS['bg'])
         
         # Set window icon
