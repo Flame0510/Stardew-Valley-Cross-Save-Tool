@@ -1,0 +1,4 @@
+test/cloud/**
+test/original/**
+.DS_Store
+.vscode/**
