@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Stardew Cross Saves Linker
+# Stardew Valley Cross Saves Tool
 # - macOS/Linux: symlink (ln -s)
 # - Windows: junction (mklink /J)
 #
@@ -19,7 +19,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 from PIL import Image, ImageTk
 
-APP_TITLE = "Stardew Cross Saves Linker"
+APP_TITLE = "Stardew Valley Cross Saves Tool"
 
 # Stardew Valley color palette
 COLORS = {
@@ -220,7 +220,7 @@ class App(tk.Tk):
         
         title_label = tk.Label(
             header_frame, 
-            text="Stardew Valley Cross Saves Linker",
+            text=APP_TITLE,
             font=("Georgia", 20, "bold"),
             fg=COLORS['primary_dark'],
             bg=COLORS['bg_light']

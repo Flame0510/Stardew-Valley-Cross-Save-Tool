@@ -5,7 +5,7 @@
 set -e  # Exit on error
 
 echo "=========================================="
-echo "  Stardew Cross Saves Linker - Build macOS"
+echo "  Stardew Valley Cross Saves Tool - Build macOS"
 echo "=========================================="
 echo ""
 
@@ -25,23 +25,23 @@ echo "✓ Dependencies installed"
 # Clean previous builds
 echo ""
 echo "🧹 Cleaning previous builds..."
-rm -rf build dist "Stardew Cross Saves Linker.pkg" "Stardew Cross Saves Linker.spec"
+rm -rf build dist "Stardew Valley Cross Saves Tool.pkg" "Stardew Valley Cross Saves Tool.spec"
 
 # Build application
 echo ""
 echo "🔨 Building application..."
 pyinstaller --windowed \
-            --name "Stardew Cross Saves Linker" \
+            --name "Stardew Valley Cross Saves Tool" \
             --add-data "assets:assets" \
-            --icon "assets/logo.png" \
-            symlinking.py --noconfirm
+            --icon "assets/logo.icns" \
+            app.py --noconfirm
 
 # Create .pkg package
 echo ""
 echo "📦 Creating .pkg installer..."
-pkgbuild --component "dist/Stardew Cross Saves Linker.app" \
+pkgbuild --component "dist/Stardew Valley Cross Saves Tool.app" \
          --install-location /Applications \
-         "Stardew Cross Saves Linker.pkg"
+         "Stardew Valley Cross Saves Tool.pkg"
 
 echo ""
 echo "=========================================="
@@ -49,8 +49,8 @@ echo "✅ Build completed successfully!"
 echo "=========================================="
 echo ""
 echo "Generated files:"
-echo "  - dist/Stardew Cross Saves Linker.app  (application)"
-echo "  - Stardew Cross Saves Linker.pkg        (installer)"
+echo "  - dist/Stardew Valley Cross Saves Tool.app  (application)"
+echo "  - Stardew Valley Cross Saves Tool.pkg        (installer)"
 echo ""
-echo "To install: double-click 'Stardew Cross Saves Linker.pkg'"
+echo "To install: double-click 'Stardew Valley Cross Saves Tool.pkg'"
 echo ""
