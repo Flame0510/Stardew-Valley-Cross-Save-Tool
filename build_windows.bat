@@ -40,7 +40,7 @@ if exist "Stardew Valley Cross-Save Tool.spec" del /f /q "Stardew Valley Cross-S
 REM Build application
 echo.
 echo [*] Building application...
-pyinstaller --windowed --name "Stardew Valley Cross-Save Tool" --add-data "assets;assets" --icon "assets\logo.ico" app.py --noconfirm
+pyinstaller --windowed --name "Stardew Valley Cross-Save Tool" --add-data "assets;assets" --add-data "src;src" --icon "assets\logo.ico" main.py --noconfirm
 
 echo.
 echo ==========================================

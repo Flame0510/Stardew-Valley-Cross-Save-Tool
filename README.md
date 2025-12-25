@@ -181,7 +181,7 @@ cd "Symlinking Tool"
 pip3 install pillow
 
 # Run the application
-python3 app.py
+python3 main.py
 ```
 
 ## ⚠️ Important: Version Compatibility & Platform Limitations
@@ -339,7 +339,22 @@ Features:
 
 ```
 Stardew Valley Cross-Save Tool/
-├── app.py                          # Main application (with design patterns)
+├── main.py                         # Main entry point
+├── src/                            # Source code (modular structure)
+│   ├── config.py                   # Singleton: Configuration
+│   ├── strategies/                 # Strategy Pattern
+│   │   ├── link_strategy.py       # Link operations (symlink/junction)
+│   │   └── platform_factory.py    # Platform-specific factory
+│   ├── detection/                 # Detection services
+│   │   ├── path_detector.py       # Path detection (macOS/Windows/Linux)
+│   │   └── game_detection.py      # Game installation detection
+│   ├── operations/                # Command Pattern
+│   │   ├── file_operations.py     # Facade: File system operations
+│   │   └── commands.py            # Migrate/Link/Restore commands
+│   ├── ui/                        # User Interface
+│   │   ├── widget_factory.py      # Factory: UI widgets
+│   │   └── main_window.py         # Main application window
+│   └── PROJECT_STRUCTURE.md       # Detailed module documentation
 ├── ARCHITECTURE.md                 # Architecture & design patterns doc
 ├── build_macos.sh                  # macOS build script
 ├── build_windows.bat               # Windows build script

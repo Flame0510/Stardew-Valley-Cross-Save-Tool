@@ -38,7 +38,8 @@ pyinstaller --onefile \
             --windowed \
             --name "Stardew Valley Cross-Save Tool" \
             --add-data "assets:assets" \
-            app.py --noconfirm
+            --add-data "src:src" \
+            main.py --noconfirm
 
 echo ""
 echo "=========================================="

@@ -37,8 +37,9 @@ echo "🔨 Building application..."
 pyinstaller --windowed \
             --name "Stardew Valley Cross-Save Tool" \
             --add-data "assets:assets" \
+            --add-data "src:src" \
             --icon "assets/logo.icns" \
-            app.py --noconfirm
+            main.py --noconfirm
 
 # Create .pkg package
 echo ""

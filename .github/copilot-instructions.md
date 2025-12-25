@@ -10,6 +10,7 @@ This is a cross-platform GUI application for syncing Stardew Valley save files a
 - Added version compatibility warning banner for PC/Mobile sync
 - Implemented GitHub Actions for automated multi-platform builds
 - Enhanced build scripts with permission management
+- **Refactored to modular structure**: Code split into focused modules in `src/` directory
 
 ## Technology Stack
 
@@ -24,14 +25,14 @@ This is a cross-platform GUI application for syncing Stardew Valley save files a
 
 ### Design Patterns Implemented
 
-**`app.py`**: Professional architecture with design patterns and SOLID principles
+The application follows professional software engineering practices with 6 major design patterns:
 
-1. **Singleton Pattern** - `Config` class for centralized configuration
-2. **Strategy Pattern** - `LinkStrategy` for platform-specific operations (symlinks vs junctions)
-3. **Factory Pattern** - `PlatformFactory`, `WidgetFactory` for object creation
-4. **Command Pattern** - `MigrateCommand`, `LinkCommand`, `RestoreCommand` for undoable operations
-5. **Facade Pattern** - `FileOperations` for simplified file system access
-6. **Template Method** - UI building structured in steps
+1. **Singleton Pattern** - `Config` class (`src/config.py`) for centralized configuration
+2. **Strategy Pattern** - `LinkStrategy` (`src/strategies/link_strategy.py`) for platform-specific operations
+3. **Factory Pattern** - `PlatformFactory`, `WidgetFactory` (`src/strategies/`, `src/ui/`) for object creation
+4. **Command Pattern** - `MigrateCommand`, `LinkCommand`, `RestoreCommand` (`src/operations/commands.py`) for undoable operations
+5. **Facade Pattern** - `FileOperations` (`src/operations/file_operations.py`) for simplified file system access
+6. **Template Method** - UI building in `StardewCrossSaveApp` (`src/ui/main_window.py`) structured in steps
 
 ### SOLID Principles
 
@@ -72,13 +73,36 @@ This is a cross-platform GUI application for syncing Stardew Valley save files a
 
 ## Code Architecture
 
-### Main File
+### Modular Structure (NEW - December 2025)
 
-**`app.py`**: Professional implementation (~1000 lines)
-- Entry Point: `main()` function
-- Main Class: `StardewCrossSaveApp(tk.Tk)` - UI coordinator with dependency injection
-- Architecture: Design patterns and SOLID principles throughout
-- Documentation: See [ARCHITECTURE.md](../ARCHITECTURE.md) for detailed documentation
+The codebase has been refactored into a clean modular structure:
+
+```
+src/
+├── config.py                  # Singleton: Configuration management
+├── strategies/               # Strategy Pattern
+│   ├── link_strategy.py     # LinkStrategy, SymlinkStrategy, JunctionStrategy
+│   └── platform_factory.py  # Platform-specific factory
+├── detection/               # Path & game detection
+│   ├── path_detector.py    # PathDetector for each platform
+│   └── game_detection.py   # GameDetectionService
+├── operations/              # Command Pattern
+│   ├── file_operations.py  # Facade for file operations
+│   └── commands.py          # MigrateCommand, LinkCommand, RestoreCommand
+└── ui/                      # User interface
+    ├── widget_factory.py   # Factory for UI widgets
+    └── main_window.py      # Main application window
+
+main.py                     # Entry point (16 lines)
+```
+
+**Benefits**:
+- Each module < 500 lines (easy to read and maintain)
+- Clear separation of concerns (SOLID)
+- Easy to test modules independently
+- Better code organization and reusability
+
+See [src/PROJECT_STRUCTURE.md](../src/PROJECT_STRUCTURE.md) for detailed documentation.
 
 ### Core Components
 
@@ -118,16 +142,6 @@ GameDetectionService
 ├── find_installation()
 └── get_platform_hint()
 ```
-
-### Original Architecture: `app.py`
-
-- **Entry Point**: `main()` function
-- **Main Class**: `App(tk.Tk)` - GUI application class
-- **Platform Detection**: `is_windows()`, `is_macos()` helper functions
-- **File Operations**: 
-  - `create_symlink_dir()` for macOS/Linux
-  - `create_junction_windows()` for Windows
-  - `backup_folder()`, `copy_contents()`, `remove_path()`
 
 ### Key Operations
 
