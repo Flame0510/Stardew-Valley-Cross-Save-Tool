@@ -123,6 +123,106 @@ def copy_contents(src_dir: Path, dst_dir: Path, overwrite: bool = True):
         else:
             shutil.copy2(item, dst)
 
+def get_possible_saves_paths() -> list[Path]:
+    """Returns list of possible Stardew Valley Saves paths for current platform"""
+    paths = []
+    
+    if is_macos():
+        # macOS paths
+        paths.append(Path.home() / "Library" / "Application Support" / "StardewValley" / "Saves")
+        paths.append(Path.home() / ".config" / "StardewValley" / "Saves")
+    elif is_windows():
+        # Windows path
+        appdata = os.getenv("APPDATA")
+        if appdata:
+            paths.append(Path(appdata) / "StardewValley" / "Saves")
+    else:
+        # Linux path
+        paths.append(Path.home() / ".config" / "StardewValley" / "Saves")
+    
+    return paths
+
+def find_game_saves_path() -> Path | None:
+    """Auto-detect Stardew Valley Saves folder if it exists"""
+    for path in get_possible_saves_paths():
+        if path.exists() and path.is_dir():
+            return path
+    return None
+
+def get_game_install_paths() -> list[Path]:
+    """Returns list of possible Stardew Valley game installation paths"""
+    paths = []
+    
+    if is_macos():
+        # macOS app bundles
+        paths.append(Path("/Applications/Stardew Valley.app"))
+        paths.append(Path.home() / "Applications" / "Stardew Valley.app")
+        # Steam
+        paths.append(Path.home() / "Library" / "Application Support" / "Steam" / "steamapps" / "common" / "Stardew Valley")
+        # GOG
+        paths.append(Path("/Applications/Stardew Valley GOG.app"))
+    elif is_windows():
+        # Steam paths
+        program_files = [
+            Path("C:/Program Files (x86)/Steam/steamapps/common/Stardew Valley"),
+            Path("C:/Program Files/Steam/steamapps/common/Stardew Valley"),
+        ]
+        paths.extend(program_files)
+        
+        # Try to find Steam library folders
+        steam_config = Path.home() / "AppData" / "Local" / "Steam"
+        if steam_config.exists():
+            paths.append(steam_config / "steamapps" / "common" / "Stardew Valley")
+        
+        # GOG default path
+        paths.append(Path("C:/GOG Games/Stardew Valley"))
+        paths.append(Path("C:/Program Files (x86)/GOG Galaxy/Games/Stardew Valley"))
+    else:
+        # Linux paths
+        # Steam
+        paths.append(Path.home() / ".steam" / "steam" / "steamapps" / "common" / "Stardew Valley")
+        paths.append(Path.home() / ".local" / "share" / "Steam" / "steamapps" / "common" / "Stardew Valley")
+        # Flatpak
+        paths.append(Path.home() / ".var" / "app" / "com.valvesoftware.Steam" / ".local" / "share" / "Steam" / "steamapps" / "common" / "Stardew Valley")
+    
+    return paths
+
+def find_game_installation() -> Path | None:
+    """
+    Auto-detect Stardew Valley installation.
+    Returns: install_path or None if not found
+    """
+    for game_path in get_game_install_paths():
+        if not game_path.exists():
+            continue
+        
+        if is_macos():
+            # Check if it's an app bundle
+            if game_path.suffix == ".app":
+                # Verify it's actually the game by checking for the executable
+                exe_path = game_path / "Contents" / "MacOS" / "Stardew Valley"
+                if exe_path.exists():
+                    return game_path
+            else:
+                # Steam installation (not .app bundle)
+                exe_path = game_path / "Contents" / "MacOS" / "Stardew Valley"
+                if exe_path.exists():
+                    return game_path
+        
+        elif is_windows():
+            # Look for executable
+            exe_path = game_path / "Stardew Valley.exe"
+            if exe_path.exists():
+                return game_path
+        
+        else:
+            # Linux - look for executable
+            exe_path = game_path / "Stardew Valley"
+            if exe_path.exists():
+                return game_path
+    
+    return None
+
 def pretty_platform_hint() -> str:
     if is_macos(): 
         return "macOS: typical Saves = ~/Library/Application Support/StardewValley/Saves or ~/.config/StardewValley/Saves"
@@ -134,8 +234,8 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title(APP_TITLE)
-        self.geometry("1000x800")
-        self.minsize(900, 700)  # Minimum window size
+        self.geometry("1000x1000")
+        self.minsize(1000, 1000)  # Minimum window size
         self.configure(bg=COLORS['bg'])
         
         # Set window icon
@@ -166,16 +266,17 @@ class App(tk.Tk):
         
         # Bind resize event
         self.bind("<Configure>", self._on_resize)
-        self.last_size = (1000, 800)
+        self.last_size = (1100, 850)
 
         self._build()
+        self._auto_detect_saves()
     
     def _load_background(self):
         """Load and resize background image"""
         try:
             if hasattr(self, 'bg_path') and self.bg_path.exists():
-                w = self.winfo_width() or 1000
-                h = self.winfo_height() or 800
+                w = self.winfo_width() or 1100
+                h = self.winfo_height() or 850
                 img = Image.open(self.bg_path)
                 img = img.resize((w, h), Image.Resampling.LANCZOS)
                 self.bg_image = ImageTk.PhotoImage(img)
@@ -263,6 +364,41 @@ class App(tk.Tk):
             justify="left"
         )
         warning_text.pack(side="left", padx=5, pady=8)
+
+        # VERSION COMPATIBILITY WARNING
+        compat_frame = tk.Frame(container, bg='#FFF9E6', bd=2, relief="solid")
+        compat_frame.pack(fill="x", padx=15, pady=(0, 10))
+        
+        compat_icon = tk.Label(
+            compat_frame,
+            text="⚡",
+            font=("Arial", 28),
+            bg='#FFF9E6',
+            fg='#F57C00'
+        )
+        compat_icon.pack(side="left", padx=10, pady=5)
+        
+        compat_content = tk.Frame(compat_frame, bg='#FFF9E6')
+        compat_content.pack(side="left", fill="x", expand=True, padx=5, pady=8)
+        
+        tk.Label(
+            compat_content,
+            text="Version Compatibility Warning:",
+            font=("Georgia", 12, "bold"),
+            bg='#FFF9E6',
+            fg=COLORS['text'],
+            justify="left"
+        ).pack(anchor="w", pady=(0, 5))
+        
+        tk.Label(
+            compat_content,
+            text="⚠️ IMPORTANT: Before syncing, verify that your PC and Mobile versions match!\nMobile updates often lag behind PC. Using incompatible versions may corrupt saves.",
+            font=("Georgia", 10, "bold"),
+            bg='#FFF9E6',
+            fg='#BF360C',
+            justify="left",
+            wraplength=750
+        ).pack(anchor="w")
 
         # Game Saves
         frm1 = tk.Frame(container, bg=COLORS['bg_light'])
@@ -398,17 +534,37 @@ class App(tk.Tk):
         sep = tk.Frame(container, height=2, bg=COLORS['primary'], relief="sunken")
         sep.pack(fill="x", padx=15, pady=15)
 
-        # Action buttons
-        frm4 = tk.Frame(container, bg=COLORS['bg_light'])
-        frm4.pack(fill="x", **pad)
+        # Action buttons section
+        actions_frame = tk.Frame(container, bg=COLORS['bg_light'])
+        actions_frame.pack(fill="x", **pad)
+        
+        # Instructions
+        tk.Label(
+            actions_frame,
+            text="Choose your action:",
+            font=("Georgia", 14, "bold"),
+            fg=COLORS['text'],
+            bg=COLORS['bg_light']
+        ).pack(anchor="w", pady=(0, 5))
+        
+        tk.Label(
+            actions_frame,
+            text="• Copy Only: backup to cloud without linking  •  Link to Cloud: full sync setup (recommended)",
+            font=("Georgia", 11, "italic"),
+            fg=COLORS['primary_dark'],
+            bg=COLORS['bg_light']
+        ).pack(anchor="w", pady=(0, 10))
 
-        buttons_data = [
-            ("1️⃣ Migrate to Cloud", self.migrate_to_cloud, COLORS['primary'], COLORS['button_text']),
-            ("2️⃣ Link Saves → Cloud", self.link_game_to_cloud, '#7CB342', COLORS['button_text']),
-            ("♻️ Restore Backup", self.restore_backup, COLORS['accent'], COLORS['button_text']),
+        # Main action buttons
+        frm4 = tk.Frame(actions_frame, bg=COLORS['bg_light'])
+        frm4.pack(fill="x", pady=(0, 10))
+
+        main_buttons = [
+            ("📋 Copy to Cloud Only", self.migrate_to_cloud, COLORS['bg_dark'], COLORS['primary_dark']),
+            ("🔗 Link to Cloud", self.link_game_to_cloud, COLORS['primary_dark'], COLORS['primary_dark']),
         ]
         
-        for text, command, bg_color, fg_color in buttons_data:
+        for text, command, bg_color, fg_color in main_buttons:
             btn = tk.Button(
                 frm4, 
                 text=text,
@@ -425,6 +581,27 @@ class App(tk.Tk):
                 pady=12
             )
             btn.pack(side="left", padx=5, expand=True, fill="x")
+        
+        # Restore button (separate, less prominent)
+        frm5 = tk.Frame(actions_frame, bg=COLORS['bg_light'])
+        frm5.pack(fill="x")
+        
+        restore_btn = tk.Button(
+            frm5,
+            text="♻️ Restore from Backup",
+            command=self.restore_backup,
+            font=("Georgia", 11),
+            bg=COLORS['bg'],
+            fg=COLORS['primary_dark'],
+            activebackground=COLORS['bg_dark'],
+            activeforeground=COLORS['primary_dark'],
+            relief="solid",
+            bd=2,
+            cursor="hand2",
+            padx=15,
+            pady=8
+        )
+        restore_btn.pack(side="right", padx=5)
 
         # Status / Logs
         tk.Label(
@@ -458,6 +635,33 @@ class App(tk.Tk):
         self._log(self.status_var.get())
 
         self.backup_path: Path | None = None
+
+    def _auto_detect_saves(self):
+        """Auto-detect game saves path and populate field if found"""
+        # Check for game installation first
+        try:
+            game_path = find_game_installation()
+            if game_path:
+                self._log(f"[GAME FOUND] Stardew Valley installed at: {game_path}")
+            else:
+                self._log("[INFO] Stardew Valley installation not auto-detected.")
+                messagebox.showwarning(
+                    APP_TITLE,
+                    "Game Not Detected\n\n"
+                    "Stardew Valley may not be installed or might be installed in a non-standard location.\n\n"
+                    "The tool will still work if you manually select your saves folder."
+                )
+        except Exception as e:
+            self._log(f"[WARNING] Error during game detection: {e}")
+        
+        # Then check for saves
+        detected_path = find_game_saves_path()
+        if detected_path:
+            self.game_saves_var.set(str(detected_path))
+            self._log(f"[AUTO-DETECT] Found game saves at: {detected_path}")
+            self._recompute_cloud_saves()
+        else:
+            self._log("[INFO] Game saves not auto-detected. Please select manually.")
 
     def _recompute_cloud_saves(self):
         cloud_root = self.cloud_root_var.get().strip()

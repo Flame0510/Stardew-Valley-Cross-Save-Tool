@@ -27,9 +27,15 @@ python -m pip install pillow pyinstaller --upgrade --quiet
 REM Clean previous builds
 echo.
 echo [*] Cleaning previous builds...
-if exist build rmdir /s /q build
-if exist dist rmdir /s /q dist
-if exist "Stardew Valley Cross-Save Tool.spec" del "Stardew Valley Cross-Save Tool.spec"
+if exist build (
+    attrib -r -h build\*.* /s /d >nul 2>&1
+    rmdir /s /q build 2>nul
+)
+if exist dist (
+    attrib -r -h dist\*.* /s /d >nul 2>&1
+    rmdir /s /q dist 2>nul
+)
+if exist "Stardew Valley Cross-Save Tool.spec" del /f /q "Stardew Valley Cross-Save Tool.spec" 2>nul
 
 REM Build application
 echo.

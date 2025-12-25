@@ -1,11 +1,11 @@
 #!/bin/bash
-# Build script for macOS
-# Generates .app application and .pkg installer package
+# Build script for Linux
+# Generates AppImage-ready application
 
 set -e  # Exit on error
 
 echo "=========================================="
-echo "  Stardew Valley Cross-Save Tool - Build macOS"
+echo "  Stardew Valley Cross-Save Tool - Build Linux"
 echo "=========================================="
 echo ""
 
@@ -29,32 +29,28 @@ if [ -d "dist" ]; then
     find dist -type d -exec chmod 755 {} \; 2>/dev/null || true
     find dist -type f -exec chmod 644 {} \; 2>/dev/null || true
 fi
-rm -rf build dist "Stardew Valley Cross-Save Tool.pkg" "Stardew Valley Cross-Save Tool.spec" 2>/dev/null || true
+rm -rf build dist "Stardew Valley Cross-Save Tool.spec" 2>/dev/null || true
 
 # Build application
 echo ""
 echo "🔨 Building application..."
-pyinstaller --windowed \
+pyinstaller --onefile \
+            --windowed \
             --name "Stardew Valley Cross-Save Tool" \
             --add-data "assets:assets" \
-            --icon "assets/logo.icns" \
             app.py --noconfirm
-
-# Create .pkg package
-echo ""
-echo "📦 Creating .pkg installer..."
-pkgbuild --component "dist/Stardew Valley Cross-Save Tool.app" \
-         --install-location /Applications \
-         "Stardew Valley Cross-Save Tool.pkg"
 
 echo ""
 echo "=========================================="
 echo "✅ Build completed successfully!"
 echo "=========================================="
 echo ""
-echo "Generated files:"
-echo "  - dist/Stardew Valley Cross Saves Tool.app  (application)"
-echo "  - Stardew Valley Cross Saves Tool.pkg        (installer)"
+echo "Generated file:"
+echo "  - dist/Stardew Valley Cross-Save Tool  (executable)"
 echo ""
-echo "To install: double-click 'Stardew Valley Cross Saves Tool.pkg'"
+echo "To run: ./dist/Stardew\ Valley\ Cross-Save\ Tool"
+echo ""
+echo "Optional: Create AppImage for distribution:"
+echo "  - Download appimagetool from https://appimage.github.io/"
+echo "  - Package with: appimagetool dist/ StardewCrossSave.AppImage"
 echo ""
