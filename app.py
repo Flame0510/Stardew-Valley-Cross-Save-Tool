@@ -1,244 +1,703 @@
 #!/usr/bin/env python3
-# Stardew Valley Cross Saves Tool
-# - macOS/Linux: symlink (ln -s)
-# - Windows: junction (mklink /J)
-#
-# Usage: GUI to select game "Saves" folder and cloud folder.
-# Creates a link: Saves -> Cloud/Saves (saves will be stored in the cloud).
-#
-# Requirements: Python 3.x (tkinter usually included)
+"""
+Stardew Valley Cross-Save Tool
+===============================
+A cross-platform tool for syncing Stardew Valley saves via cloud storage.
+
+Architecture:
+- Strategy Pattern: Platform-specific operations (symlink vs junction)
+- Factory Pattern: Consistent widget creation
+- Command Pattern: Undoable operations
+- Singleton Pattern: Configuration management
+- Facade Pattern: Simplified operation interface
+- SOLID Principles: Single Responsibility, Open/Closed, etc.
+"""
 
 import os
 import platform
 import shutil
 import subprocess
-import sys
 import time
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol, Optional
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from PIL import Image, ImageTk
 
-APP_TITLE = "Stardew Valley Cross-Save Tool"
 
-# Stardew Valley color palette
-COLORS = {
-    'bg': '#8B4513',           # Brown (wood)
-    'bg_dark': '#5D2E0F',      # Dark brown
-    'bg_light': '#D2B48C',     # Light tan
-    'primary': '#5C8A3D',      # Stardew green
-    'primary_dark': '#3D5A29', # Dark green
-    'accent': '#F4A460',       # Sandy brown
-    'text': '#3E2723',         # Dark brown text
-    'text_light': '#FFFFFF',   # White text
-    'button': '#8FBC8F',       # Light green
-    'button_hover': '#6B9B6B', # Darker green on hover
-    'button_text': '#2C1810',  # Very dark brown for button text
-    'error': '#C74440',        # Red
-    'success': '#5C8A3D',      # Green
-}
+# ============================================================================
+# CONFIGURATION - Singleton Pattern
+# ============================================================================
 
-def is_windows() -> bool:
-    return platform.system().lower().startswith("win")
-
-def is_macos() -> bool:
-    return platform.system().lower() == "darwin"
-
-def norm(p: str) -> str:
-    return str(Path(p).expanduser().resolve())
-
-def path_exists(p: str) -> bool:
-    try:
-        return Path(p).exists()
-    except Exception:
-        return False
-
-def is_link(p: Path) -> bool:
-    try:
-        return p.is_symlink()
-    except Exception:
-        return False
-
-def is_junction_windows(p: Path) -> bool:
-    # Junctions are directory reparse points; Python doesn't always treat them as symlinks.
-    if not is_windows() or not p.exists():
-        return False
-    try:
-        # "dir /AL" shows reparse points; but easiest: check if it's a reparse point via attrib
-        # We'll use: fsutil reparsepoint query <path> (works on Windows, may require admin).
-        cmd = ["cmd", "/c", "fsutil", "reparsepoint", "query", str(p)]
-        r = subprocess.run(cmd, capture_output=True, text=True)
-        return r.returncode == 0
-    except Exception:
-        return False
-
-def ensure_dir(p: str):
-    Path(p).mkdir(parents=True, exist_ok=True)
-
-def backup_folder(src: Path, backups_root: Path) -> Path:
-    ensure_dir(str(backups_root))
-    ts = time.strftime("%Y%m%d-%H%M%S")
-    dst = backups_root / f"Saves-backup-{ts}"
-    shutil.copytree(src, dst)
-    return dst
-
-def remove_path(p: Path):
-    if not p.exists():
-        return
-    if p.is_symlink():
-        p.unlink()
-        return
-    if p.is_dir():
-        shutil.rmtree(p)
-        return
-    p.unlink()
-
-def create_symlink_dir(link_path: Path, target_path: Path):
-    # link_path becomes a symlink pointing to target_path
-    try:
-        os.symlink(str(target_path), str(link_path), target_is_directory=True)
-    except OSError as e:
-        raise RuntimeError(f"Failed to create symlink: {e}")
-
-def create_junction_windows(link_path: Path, target_path: Path):
-    # mklink /J "link" "target"
-    # Quote paths to handle spaces
-    cmd = ["cmd", "/c", "mklink", "/J", f'"{link_path}"', f'"{target_path}"']
-    r = subprocess.run(cmd, capture_output=True, text=True)
-    if r.returncode != 0:
-        error_msg = r.stderr.strip() or r.stdout.strip() or "mklink failed"
-        raise RuntimeError(f"Failed to create junction: {error_msg}")
-
-def copy_contents(src_dir: Path, dst_dir: Path, overwrite: bool = True):
-    ensure_dir(str(dst_dir))
-    for item in src_dir.iterdir():
-        dst = dst_dir / item.name
-        if dst.exists() and overwrite:
-            if dst.is_dir():
-                shutil.rmtree(dst)
-            else:
-                dst.unlink()
-        if item.is_dir():
-            shutil.copytree(item, dst)
-        else:
-            shutil.copy2(item, dst)
-
-def get_possible_saves_paths() -> list[Path]:
-    """Returns list of possible Stardew Valley Saves paths for current platform"""
-    paths = []
+class Config:
+    """Singleton configuration manager (DRY principle)"""
+    _instance = None
     
-    if is_macos():
-        # macOS paths
-        paths.append(Path.home() / "Library" / "Application Support" / "StardewValley" / "Saves")
-        paths.append(Path.home() / ".config" / "StardewValley" / "Saves")
-    elif is_windows():
-        # Windows path
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._initialize()
+        return cls._instance
+    
+    def _initialize(self):
+        self.APP_TITLE = "Stardew Valley Cross-Save Tool"
+        self.WINDOW_SIZE = (1000, 1000)
+        self.MIN_SIZE = (1000, 1000)
+        self.BACKUP_ROOT = Path.home() / "StardewValleyCrossSaves_Backups"
+        
+        # Color palette (Stardew Valley theme)
+        self.COLORS = {
+            'bg': '#8B4513',
+            'bg_dark': '#5D2E0F',
+            'bg_light': '#D2B48C',
+            'primary': '#5C8A3D',
+            'primary_dark': '#3D5A29',
+            'accent': '#F4A460',
+            'text': '#3E2723',
+            'text_light': '#FFFFFF',
+            'button': '#8FBC8F',
+            'button_hover': '#6B9B6B',
+            'button_text': '#2C1810',
+            'error': '#C74440',
+            'success': '#5C8A3D',
+        }
+        
+        # Font configuration
+        self.FONTS = {
+            'title': ('Georgia', 20, 'bold'),
+            'subtitle': ('Georgia', 13),
+            'label': ('Georgia', 16, 'bold'),
+            'hint': ('Georgia', 12, 'italic'),
+            'button': ('Georgia', 13, 'bold'),
+            'button_small': ('Georgia', 11, 'bold'),
+            'entry': ('Courier', 11),
+            'log': ('Courier', 10),
+        }
+
+
+# ============================================================================
+# PLATFORM ABSTRACTION - Strategy Pattern (SOLID: Open/Closed Principle)
+# ============================================================================
+
+class LinkStrategy(ABC):
+    """Abstract strategy for platform-specific link operations"""
+    
+    @abstractmethod
+    def create_link(self, link_path: Path, target_path: Path) -> None:
+        """Create a link from link_path to target_path"""
+        pass
+    
+    @abstractmethod
+    def is_link(self, path: Path) -> bool:
+        """Check if path is a link/junction"""
+        pass
+    
+    @abstractmethod
+    def remove_link(self, path: Path) -> None:
+        """Remove a link/junction"""
+        pass
+
+
+class SymlinkStrategy(LinkStrategy):
+    """Strategy for Unix-like systems (macOS, Linux)"""
+    
+    def create_link(self, link_path: Path, target_path: Path) -> None:
+        try:
+            os.symlink(str(target_path), str(link_path), target_is_directory=True)
+        except OSError as e:
+            raise RuntimeError(f"Failed to create symlink: {e}")
+    
+    def is_link(self, path: Path) -> bool:
+        try:
+            return path.is_symlink()
+        except Exception:
+            return False
+    
+    def remove_link(self, path: Path) -> None:
+        if path.exists() and self.is_link(path):
+            path.unlink()
+
+
+class JunctionStrategy(LinkStrategy):
+    """Strategy for Windows (junction points)"""
+    
+    def create_link(self, link_path: Path, target_path: Path) -> None:
+        cmd = ["cmd", "/c", "mklink", "/J", f'"{link_path}"', f'"{target_path}"']
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            error_msg = result.stderr.strip() or result.stdout.strip() or "mklink failed"
+            raise RuntimeError(f"Failed to create junction: {error_msg}")
+    
+    def is_link(self, path: Path) -> bool:
+        if not path.exists():
+            return False
+        try:
+            cmd = ["cmd", "/c", "fsutil", "reparsepoint", "query", str(path)]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            return result.returncode == 0
+        except Exception:
+            return False
+    
+    def remove_link(self, path: Path) -> None:
+        if path.exists() and self.is_link(path):
+            path.unlink()
+
+
+class PlatformFactory:
+    """Factory for creating platform-specific strategies (Factory Pattern)"""
+    
+    @staticmethod
+    def create_link_strategy() -> LinkStrategy:
+        system = platform.system().lower()
+        if system.startswith("win"):
+            return JunctionStrategy()
+        else:
+            return SymlinkStrategy()
+    
+    @staticmethod
+    def get_platform_name() -> str:
+        system = platform.system().lower()
+        if system.startswith("win"):
+            return "Windows"
+        elif system == "darwin":
+            return "macOS"
+        else:
+            return "Linux"
+
+
+# ============================================================================
+# PATH DETECTION - Strategy Pattern
+# ============================================================================
+
+class PathDetector(ABC):
+    """Abstract detector for platform-specific paths"""
+    
+    @abstractmethod
+    def get_saves_paths(self) -> list[Path]:
+        """Get possible save file locations"""
+        pass
+    
+    @abstractmethod
+    def get_install_paths(self) -> list[Path]:
+        """Get possible game installation paths"""
+        pass
+
+
+class MacOSPathDetector(PathDetector):
+    def get_saves_paths(self) -> list[Path]:
+        return [
+            Path.home() / "Library" / "Application Support" / "StardewValley" / "Saves",
+            Path.home() / ".config" / "StardewValley" / "Saves"
+        ]
+    
+    def get_install_paths(self) -> list[Path]:
+        return [
+            Path("/Applications/Stardew Valley.app"),
+            Path.home() / "Applications" / "Stardew Valley.app",
+            Path.home() / "Library" / "Application Support" / "Steam" / "steamapps" / "common" / "Stardew Valley",
+            Path("/Applications/Stardew Valley GOG.app")
+        ]
+
+
+class WindowsPathDetector(PathDetector):
+    def get_saves_paths(self) -> list[Path]:
         appdata = os.getenv("APPDATA")
         if appdata:
-            paths.append(Path(appdata) / "StardewValley" / "Saves")
-    else:
-        # Linux path
-        paths.append(Path.home() / ".config" / "StardewValley" / "Saves")
+            return [Path(appdata) / "StardewValley" / "Saves"]
+        return []
     
-    return paths
-
-def find_game_saves_path() -> Path | None:
-    """Auto-detect Stardew Valley Saves folder if it exists"""
-    for path in get_possible_saves_paths():
-        if path.exists() and path.is_dir():
-            return path
-    return None
-
-def get_game_install_paths() -> list[Path]:
-    """Returns list of possible Stardew Valley game installation paths"""
-    paths = []
-    
-    if is_macos():
-        # macOS app bundles
-        paths.append(Path("/Applications/Stardew Valley.app"))
-        paths.append(Path.home() / "Applications" / "Stardew Valley.app")
-        # Steam
-        paths.append(Path.home() / "Library" / "Application Support" / "Steam" / "steamapps" / "common" / "Stardew Valley")
-        # GOG
-        paths.append(Path("/Applications/Stardew Valley GOG.app"))
-    elif is_windows():
-        # Steam paths
-        program_files = [
+    def get_install_paths(self) -> list[Path]:
+        paths = [
             Path("C:/Program Files (x86)/Steam/steamapps/common/Stardew Valley"),
             Path("C:/Program Files/Steam/steamapps/common/Stardew Valley"),
+            Path("C:/GOG Games/Stardew Valley"),
+            Path("C:/Program Files (x86)/GOG Galaxy/Games/Stardew Valley")
         ]
-        paths.extend(program_files)
         
-        # Try to find Steam library folders
         steam_config = Path.home() / "AppData" / "Local" / "Steam"
         if steam_config.exists():
             paths.append(steam_config / "steamapps" / "common" / "Stardew Valley")
         
-        # GOG default path
-        paths.append(Path("C:/GOG Games/Stardew Valley"))
-        paths.append(Path("C:/Program Files (x86)/GOG Galaxy/Games/Stardew Valley"))
-    else:
-        # Linux paths
-        # Steam
-        paths.append(Path.home() / ".steam" / "steam" / "steamapps" / "common" / "Stardew Valley")
-        paths.append(Path.home() / ".local" / "share" / "Steam" / "steamapps" / "common" / "Stardew Valley")
-        # Flatpak
-        paths.append(Path.home() / ".var" / "app" / "com.valvesoftware.Steam" / ".local" / "share" / "Steam" / "steamapps" / "common" / "Stardew Valley")
-    
-    return paths
+        return paths
 
-def find_game_installation() -> Path | None:
-    """
-    Auto-detect Stardew Valley installation.
-    Returns: install_path or None if not found
-    """
-    for game_path in get_game_install_paths():
-        if not game_path.exists():
-            continue
-        
-        if is_macos():
-            # Check if it's an app bundle
-            if game_path.suffix == ".app":
-                # Verify it's actually the game by checking for the executable
-                exe_path = game_path / "Contents" / "MacOS" / "Stardew Valley"
-                if exe_path.exists():
-                    return game_path
-            else:
-                # Steam installation (not .app bundle)
-                exe_path = game_path / "Contents" / "MacOS" / "Stardew Valley"
-                if exe_path.exists():
-                    return game_path
-        
-        elif is_windows():
-            # Look for executable
-            exe_path = game_path / "Stardew Valley.exe"
-            if exe_path.exists():
-                return game_path
-        
+
+class LinuxPathDetector(PathDetector):
+    def get_saves_paths(self) -> list[Path]:
+        return [Path.home() / ".config" / "StardewValley" / "Saves"]
+    
+    def get_install_paths(self) -> list[Path]:
+        return [
+            Path.home() / ".steam" / "steam" / "steamapps" / "common" / "Stardew Valley",
+            Path.home() / ".local" / "share" / "Steam" / "steamapps" / "common" / "Stardew Valley",
+            Path.home() / ".var" / "app" / "com.valvesoftware.Steam" / ".local" / "share" / "Steam" / "steamapps" / "common" / "Stardew Valley"
+        ]
+
+
+class PathDetectorFactory:
+    """Factory for creating platform-specific path detectors"""
+    
+    @staticmethod
+    def create() -> PathDetector:
+        system = platform.system().lower()
+        if system.startswith("win"):
+            return WindowsPathDetector()
+        elif system == "darwin":
+            return MacOSPathDetector()
         else:
-            # Linux - look for executable
-            exe_path = game_path / "Stardew Valley"
-            if exe_path.exists():
-                return game_path
+            return LinuxPathDetector()
+
+
+# ============================================================================
+# FILE OPERATIONS - Facade Pattern (KISS Principle)
+# ============================================================================
+
+class FileOperations:
+    """Facade for file system operations (simplifies complex operations)"""
     
-    return None
+    @staticmethod
+    def normalize_path(path: str) -> str:
+        """Normalize and resolve path"""
+        return str(Path(path).expanduser().resolve())
+    
+    @staticmethod
+    def ensure_directory(path: Path) -> None:
+        """Create directory if it doesn't exist"""
+        path.mkdir(parents=True, exist_ok=True)
+    
+    @staticmethod
+    def path_exists(path: str) -> bool:
+        """Check if path exists (safe)"""
+        try:
+            return Path(path).exists()
+        except Exception:
+            return False
+    
+    @staticmethod
+    def copy_contents(src: Path, dst: Path, overwrite: bool = True) -> None:
+        """Copy all contents from src to dst"""
+        FileOperations.ensure_directory(dst)
+        for item in src.iterdir():
+            dst_item = dst / item.name
+            if dst_item.exists() and overwrite:
+                if dst_item.is_dir():
+                    shutil.rmtree(dst_item)
+                else:
+                    dst_item.unlink()
+            if item.is_dir():
+                shutil.copytree(item, dst_item)
+            else:
+                shutil.copy2(item, dst_item)
+    
+    @staticmethod
+    def backup_folder(src: Path, backup_root: Path) -> Path:
+        """Create timestamped backup of folder"""
+        FileOperations.ensure_directory(backup_root)
+        timestamp = time.strftime("%Y%m%d-%H%M%S")
+        dst = backup_root / f"Saves-backup-{timestamp}"
+        shutil.copytree(src, dst)
+        return dst
+    
+    @staticmethod
+    def remove_path(path: Path) -> None:
+        """Remove file or directory"""
+        if not path.exists():
+            return
+        if path.is_symlink():
+            path.unlink()
+        elif path.is_dir():
+            shutil.rmtree(path)
+        else:
+            path.unlink()
 
-def pretty_platform_hint() -> str:
-    if is_macos(): 
-        return "macOS: typical Saves = ~/Library/Application Support/StardewValley/Saves or ~/.config/StardewValley/Saves"
-    if is_windows():
-        return "Windows: typical Saves = %AppData%\\StardewValley\\Saves"
-    return "Linux: typical Saves = ~/.config/StardewValley/Saves"
 
-class App(tk.Tk):
+# ============================================================================
+# GAME DETECTION SERVICE (Single Responsibility Principle)
+# ============================================================================
+
+class GameDetectionService:
+    """Service for detecting game installation and saves"""
+    
+    def __init__(self, path_detector: PathDetector):
+        self.path_detector = path_detector
+    
+    def find_saves_path(self) -> Optional[Path]:
+        """Find game saves directory"""
+        for path in self.path_detector.get_saves_paths():
+            if path.exists() and path.is_dir():
+                return path
+        return None
+    
+    def find_installation(self) -> Optional[Path]:
+        """Find game installation directory"""
+        for game_path in self.path_detector.get_install_paths():
+            if not game_path.exists():
+                continue
+            
+            # Platform-specific validation
+            system = platform.system().lower()
+            if system == "darwin":
+                # Check if it's a .app bundle (macOS)
+                if game_path.suffix == ".app":
+                    return game_path
+                # Or a Steam installation folder (has Contents directory)
+                elif (game_path / "Contents").exists():
+                    return game_path
+                # Or contains a .app bundle
+                elif (game_path / "Stardew Valley.app").exists():
+                    return game_path
+            elif system.startswith("win"):
+                exe_path = game_path / "Stardew Valley.exe"
+                if exe_path.exists():
+                    return game_path
+            else:  # Linux
+                exe_path = game_path / "Stardew Valley"
+                if exe_path.exists():
+                    return game_path
+        
+        return None
+    
+    def get_platform_hint(self) -> str:
+        """Get helpful hint for current platform"""
+        system = platform.system().lower()
+        if system == "darwin":
+            return "macOS: typical Saves = ~/Library/Application Support/StardewValley/Saves"
+        elif system.startswith("win"):
+            return "Windows: typical Saves = %AppData%\\StardewValley\\Saves"
+        else:
+            return "Linux: typical Saves = ~/.config/StardewValley/Saves"
+
+
+# ============================================================================
+# COMMAND PATTERN - Undoable Operations
+# ============================================================================
+
+class Command(ABC):
+    """Abstract command for operations (Command Pattern)"""
+    
+    @abstractmethod
+    def execute(self) -> None:
+        """Execute the command"""
+        pass
+    
+    @abstractmethod
+    def can_undo(self) -> bool:
+        """Check if command can be undone"""
+        pass
+    
+    @abstractmethod
+    def undo(self) -> None:
+        """Undo the command"""
+        pass
+
+
+@dataclass
+class OperationResult:
+    """Result of an operation (Value Object)"""
+    success: bool
+    message: str
+    backup_path: Optional[Path] = None
+
+
+class MigrateCommand(Command):
+    """Command to migrate saves to cloud"""
+    
+    def __init__(self, game_saves: Path, cloud_saves: Path, logger):
+        self.game_saves = game_saves
+        self.cloud_saves = cloud_saves
+        self.logger = logger
+        self.backup_path: Optional[Path] = None
+    
+    def execute(self) -> OperationResult:
+        try:
+            self.logger(f"[MIGRATE] Game Saves: {self.game_saves}")
+            self.logger(f"[MIGRATE] Cloud Saves: {self.cloud_saves}")
+            
+            FileOperations.ensure_directory(self.cloud_saves)
+            FileOperations.copy_contents(self.game_saves, self.cloud_saves, overwrite=True)
+            
+            self.logger("[OK] Copy to cloud completed")
+            return OperationResult(True, "Migration completed: saves copied to cloud")
+        except Exception as e:
+            self.logger(f"[ERROR] {e}")
+            return OperationResult(False, str(e))
+    
+    def can_undo(self) -> bool:
+        return False  # Migrate doesn't need undo (non-destructive)
+    
+    def undo(self) -> None:
+        pass
+
+
+class LinkCommand(Command):
+    """Command to link saves to cloud"""
+    
+    def __init__(self, game_saves: Path, cloud_saves: Path, link_strategy: LinkStrategy, 
+                 config: Config, logger):
+        self.game_saves = game_saves
+        self.cloud_saves = cloud_saves
+        self.link_strategy = link_strategy
+        self.config = config
+        self.logger = logger
+        self.backup_path: Optional[Path] = None
+    
+    def execute(self) -> OperationResult:
+        try:
+            self.logger(f"[LINK] Game Saves: {self.game_saves}")
+            self.logger(f"[LINK] Cloud Saves: {self.cloud_saves}")
+            
+            # Check if already linked
+            if self.link_strategy.is_link(self.game_saves):
+                return OperationResult(False, 
+                    "The game Saves folder appears to already be a link/junction.\n"
+                    "Use 'Restore Backup' first to remove it.")
+            
+            # Ensure cloud folder exists
+            FileOperations.ensure_directory(self.cloud_saves)
+            self.logger("[INFO] Preparing cloud Saves folder")
+            
+            # Copy to cloud BEFORE removing local (data safety)
+            self.logger("[MIGRATE] Copying saves to cloud...")
+            FileOperations.copy_contents(self.game_saves, self.cloud_saves, overwrite=True)
+            self.logger("[OK] Saves migrated to cloud")
+            
+            # Backup local saves
+            self.backup_path = FileOperations.backup_folder(
+                self.game_saves, self.config.BACKUP_ROOT
+            )
+            self.logger(f"[BACKUP] Created at: {self.backup_path}")
+            
+            # Remove original folder
+            FileOperations.remove_path(self.game_saves)
+            self.logger("[INFO] Removed original Saves folder")
+            
+            # Create link
+            self.link_strategy.create_link(self.game_saves, self.cloud_saves)
+            self.logger(f"[OK] Link created: {self.game_saves} -> {self.cloud_saves}")
+            
+            return OperationResult(True, 
+                "Link created! Your saves are now synced via cloud storage.",
+                self.backup_path)
+        except Exception as e:
+            self.logger(f"[ERROR] {e}")
+            return OperationResult(False, str(e))
+    
+    def can_undo(self) -> bool:
+        return self.backup_path is not None and self.backup_path.exists()
+    
+    def undo(self) -> None:
+        """Restore from backup"""
+        if not self.can_undo():
+            raise RuntimeError("No backup available for undo")
+        
+        # Remove link
+        if self.game_saves.exists():
+            self.link_strategy.remove_link(self.game_saves)
+            FileOperations.remove_path(self.game_saves)
+        
+        # Restore backup
+        shutil.copytree(self.backup_path, self.game_saves)
+        self.logger(f"[UNDO] Restored from backup: {self.backup_path}")
+
+
+class RestoreCommand(Command):
+    """Command to restore from backup"""
+    
+    def __init__(self, game_saves: Path, backup_path: Optional[Path], 
+                 link_strategy: LinkStrategy, logger):
+        self.game_saves = game_saves
+        self.backup_path = backup_path
+        self.link_strategy = link_strategy
+        self.logger = logger
+    
+    def execute(self) -> OperationResult:
+        try:
+            if not self.backup_path or not self.backup_path.exists():
+                return OperationResult(False, 
+                    "No backup available.\nBackup is only created after 'Link to Cloud'.")
+            
+            self.logger(f"[RESTORE] From: {self.backup_path}")
+            
+            # Remove current link/folder
+            if self.game_saves.exists():
+                FileOperations.remove_path(self.game_saves)
+                self.logger("[INFO] Removed current link/folder")
+            
+            # Restore backup
+            shutil.copytree(self.backup_path, self.game_saves)
+            self.logger("[OK] Backup restored")
+            
+            return OperationResult(True, "Restore completed: original saves are back to local")
+        except Exception as e:
+            self.logger(f"[ERROR] {e}")
+            return OperationResult(False, str(e))
+    
+    def can_undo(self) -> bool:
+        return False  # Restore itself is an undo operation
+    
+    def undo(self) -> None:
+        pass
+
+
+# ============================================================================
+# UI FACTORY - Factory Pattern for Widget Creation (DRY Principle)
+# ============================================================================
+
+class WidgetFactory:
+    """Factory for creating styled widgets (reduces code duplication)"""
+    
+    def __init__(self, config: Config):
+        self.config = config
+    
+    def create_label(self, parent, text: str, font_key: str = 'label', 
+                    fg: str = None, **kwargs) -> tk.Label:
+        """Create a styled label"""
+        return tk.Label(
+            parent,
+            text=text,
+            font=self.config.FONTS[font_key],
+            fg=fg or self.config.COLORS['text'],
+            bg=self.config.COLORS['bg_light'],
+            **kwargs
+        )
+    
+    def create_entry(self, parent, textvariable, readonly: bool = False, **kwargs) -> tk.Entry:
+        """Create a styled entry"""
+        state = "readonly" if readonly else "normal"
+        bg = '#E8E8E8' if readonly else '#FFFACD'
+        return tk.Entry(
+            parent,
+            textvariable=textvariable,
+            state=state,
+            font=self.config.FONTS['entry'],
+            bg=bg,
+            fg=self.config.COLORS['text'],
+            relief="solid",
+            bd=1,
+            **kwargs
+        )
+    
+    def create_button(self, parent, text: str, command, style: str = 'primary', 
+                     **kwargs) -> tk.Button:
+        """Create a styled button"""
+        styles = {
+            'primary': {
+                'bg': self.config.COLORS['primary_dark'],
+                'fg': self.config.COLORS['button_text'],
+                'font': self.config.FONTS['button']
+            },
+            'secondary': {
+                'bg': self.config.COLORS['bg_dark'],
+                'fg': self.config.COLORS['button_text'],
+                'font': self.config.FONTS['button']
+            },
+            'small': {
+                'bg': self.config.COLORS['button'],
+                'fg': self.config.COLORS['button_text'],
+                'font': self.config.FONTS['button_small']
+            },
+            'restore': {
+                'bg': self.config.COLORS['bg'],
+                'fg': self.config.COLORS['primary_dark'],
+                'font': self.config.FONTS['button_small']
+            }
+        }
+        
+        style_config = styles.get(style, styles['primary'])
+        
+        return tk.Button(
+            parent,
+            text=text,
+            command=command,
+            bg=style_config['bg'],
+            fg=style_config['fg'],
+            font=style_config['font'],
+            activebackground=self.config.COLORS['button_hover'],
+            relief="solid",
+            bd=2,
+            cursor="hand2",
+            padx=15,
+            pady=10,
+            **kwargs
+        )
+    
+    def create_warning_banner(self, parent, icon: str, title: str, 
+                            message: str, bg_color: str) -> tk.Frame:
+        """Create a warning/info banner"""
+        frame = tk.Frame(parent, bg=bg_color, bd=2, relief="solid")
+        
+        icon_label = tk.Label(
+            frame,
+            text=icon,
+            font=("Arial", 28),
+            bg=bg_color,
+            fg=self.config.COLORS['error']
+        )
+        icon_label.pack(side="left", padx=10, pady=5)
+        
+        content = tk.Frame(frame, bg=bg_color)
+        content.pack(side="left", fill="x", expand=True, padx=5, pady=8)
+        
+        if title:
+            tk.Label(
+                content,
+                text=title,
+                font=("Georgia", 12, "bold"),
+                bg=bg_color,
+                fg=self.config.COLORS['text'],
+                justify="left"
+            ).pack(anchor="w", pady=(0, 5))
+        
+        tk.Label(
+            content,
+            text=message,
+            font=("Georgia", 10, "bold"),
+            bg=bg_color,
+            fg='#8B0000' if 'FFE5E5' in bg_color else '#BF360C',
+            justify="left",
+            wraplength=750
+        ).pack(anchor="w")
+        
+        return frame
+
+
+# ============================================================================
+# MAIN APPLICATION - Template Method Pattern
+# ============================================================================
+
+class StardewCrossSaveApp(tk.Tk):
+    """Main application (uses composition over inheritance)"""
+    
     def __init__(self):
         super().__init__()
-        self.title(APP_TITLE)
-        self.geometry("1000x1000")
-        self.minsize(1000, 1000)  # Minimum window size
-        self.configure(bg=COLORS['bg'])
         
-        # Set window icon
+        # Dependency injection (SOLID: Dependency Inversion)
+        self.config = Config()
+        self.link_strategy = PlatformFactory.create_link_strategy()
+        self.path_detector = PathDetectorFactory.create()
+        self.game_detector = GameDetectionService(self.path_detector)
+        self.widget_factory = WidgetFactory(self.config)
+        
+        # State
+        self.game_saves_var = tk.StringVar()
+        self.cloud_root_var = tk.StringVar()
+        self.cloud_saves_var = tk.StringVar()
+        self.last_backup: Optional[Path] = None
+        
+        # Setup window
+        self._setup_window()
+        self._build_ui()
+        self._auto_detect()
+    
+    def _setup_window(self):
+        """Configure main window"""
+        self.title(self.config.APP_TITLE)
+        self.geometry(f"{self.config.WINDOW_SIZE[0]}x{self.config.WINDOW_SIZE[1]}")
+        self.minsize(*self.config.MIN_SIZE)
+        self.configure(bg=self.config.COLORS['bg'])
+        
+        # Set icon
         try:
             icon_path = Path(__file__).parent / "assets" / "logo.png"
             if icon_path.exists():
@@ -246,385 +705,226 @@ class App(tk.Tk):
                 self.iconphoto(True, icon)
         except Exception:
             pass
-
-        self.game_saves_var = tk.StringVar(value="")
-        self.cloud_root_var = tk.StringVar(value="")
-        self.cloud_saves_var = tk.StringVar(value="")  # computed
-
-        self.status_var = tk.StringVar(value=pretty_platform_hint())
         
-        # Load background image
-        self.bg_image = None
-        self.bg_label = None
+        # Background image
+        self._load_background()
+        self.bind("<Configure>", self._on_resize)
+        self.last_size = self.config.WINDOW_SIZE
+    
+    def _load_background(self):
+        """Load background image"""
         try:
             bg_path = Path(__file__).parent / "assets" / "background.jpg"
             if bg_path.exists():
-                self.bg_path = bg_path
-                self._load_background()
-        except Exception as e:
-            print(f"Could not load background: {e}")
-        
-        # Bind resize event
-        self.bind("<Configure>", self._on_resize)
-        self.last_size = (1100, 850)
-
-        self._build()
-        self._auto_detect_saves()
-    
-    def _load_background(self):
-        """Load and resize background image"""
-        try:
-            if hasattr(self, 'bg_path') and self.bg_path.exists():
-                w = self.winfo_width() or 1100
-                h = self.winfo_height() or 850
-                img = Image.open(self.bg_path)
+                w, h = self.winfo_width() or self.config.WINDOW_SIZE[0], \
+                       self.winfo_height() or self.config.WINDOW_SIZE[1]
+                img = Image.open(bg_path)
                 img = img.resize((w, h), Image.Resampling.LANCZOS)
                 self.bg_image = ImageTk.PhotoImage(img)
-                if self.bg_label:
-                    self.bg_label.config(image=self.bg_image)
+                
+                if hasattr(self, 'bg_label'):
+                    self.bg_label.configure(image=self.bg_image)
+                else:
+                    self.bg_label = tk.Label(self, image=self.bg_image)
+                    self.bg_label.place(x=0, y=0, relwidth=1, relheight=1)
         except Exception as e:
-            print(f"Error loading background: {e}")
+            print(f"Background load error: {e}")
     
     def _on_resize(self, event):
         """Handle window resize"""
         if event.widget == self:
-            current_size = (event.width, event.height)
-            # Only reload if size changed significantly (avoid too many reloads)
-            if abs(current_size[0] - self.last_size[0]) > 50 or abs(current_size[1] - self.last_size[1]) > 50:
-                self.last_size = current_size
+            current = (event.width, event.height)
+            if abs(current[0] - self.last_size[0]) > 50 or \
+               abs(current[1] - self.last_size[1]) > 50:
+                self.last_size = current
                 self.after(100, self._load_background)
-
-    def _build(self):
+    
+    def _build_ui(self):
+        """Build user interface (Template Method)"""
         pad = {"padx": 15, "pady": 8}
         
-        # Background
-        if self.bg_image:
-            self.bg_label = tk.Label(self, image=self.bg_image)
-            self.bg_label.place(x=0, y=0, relwidth=1, relheight=1)
-        
-        # Main container with responsive placement
+        # Main container
         main_frame = tk.Frame(self, bg='', bd=0)
         main_frame.place(relx=0.5, rely=0.5, anchor="center", relwidth=0.96, relheight=0.96)
         
-        container = tk.Frame(main_frame, bg=COLORS['bg_light'], bd=4, relief="ridge")
+        container = tk.Frame(main_frame, bg=self.config.COLORS['bg_light'], bd=4, relief="ridge")
         container.pack(fill="both", expand=True)
-
-        # Header with logo
-        header_frame = tk.Frame(container, bg=COLORS['bg_light'])
-        header_frame.pack(fill="x", **pad)
         
+        # Header
+        self._build_header(container, pad)
+        
+        # Warning banners
+        self._build_warnings(container)
+        
+        # Path selection
+        self._build_path_selectors(container, pad)
+        
+        # Action buttons
+        self._build_actions(container, pad)
+        
+        # Log area
+        self._build_log(container)
+    
+    def _build_header(self, parent, pad):
+        """Build header with logo and title"""
+        header = tk.Frame(parent, bg=self.config.COLORS['bg_light'])
+        header.pack(fill="x", **pad)
+        
+        # Logo
         try:
             logo_path = Path(__file__).parent / "assets" / "logo.png"
             if logo_path.exists():
-                logo_img = Image.open(logo_path)
-                logo_img = logo_img.resize((60, 60), Image.Resampling.LANCZOS)
+                logo_img = Image.open(logo_path).resize((60, 60), Image.Resampling.LANCZOS)
                 self.logo_photo = ImageTk.PhotoImage(logo_img)
-                logo_label = tk.Label(header_frame, image=self.logo_photo, bg=COLORS['bg_light'])
-                logo_label.pack(side="left", padx=10)
+                tk.Label(header, image=self.logo_photo, bg=self.config.COLORS['bg_light']).pack(side="left")
         except Exception:
             pass
         
-        title_label = tk.Label(
-            header_frame, 
-            text=APP_TITLE,
-            font=("Georgia", 20, "bold"),
-            fg=COLORS['primary_dark'],
-            bg=COLORS['bg_light']
+        # Title
+        self.widget_factory.create_label(
+            header, self.config.APP_TITLE, 'title', 
+            fg=self.config.COLORS['primary_dark']
+        ).pack(side="left", padx=10)
+        
+        # Subtitle
+        self.widget_factory.create_label(
+            parent, "Link your Saves to Cloud (iCloud/OneDrive/Dropbox)",
+            'subtitle'
+        ).pack(anchor="w", padx=15, pady=(0, 5))
+    
+    def _build_warnings(self, parent):
+        """Build warning banners"""
+        # Backup warning
+        banner = self.widget_factory.create_warning_banner(
+            parent, "⚠️", "",
+            "IMPORTANT: The tool creates automatic backups, but it's recommended\n"
+            "to manually backup your saves before proceeding for extra safety!",
+            '#FFE5E5'
         )
-        title_label.pack(side="left", padx=10)
+        banner.pack(fill="x", padx=15, pady=10)
         
-        subtitle = tk.Label(
-            container,
-            text="Link your Saves to Cloud (iCloud/OneDrive/Dropbox)",
-            font=("Georgia", 13),
-            fg=COLORS['text'],
-            bg=COLORS['bg_light']
+        # Version compatibility
+        banner = self.widget_factory.create_warning_banner(
+            parent, "⚡", "Version Compatibility Warning:",
+            "⚠️ IMPORTANT: Before syncing, verify that your PC and Mobile versions match!\n"
+            "Mobile updates often lag behind PC. Using incompatible versions may corrupt saves.",
+            '#FFF9E6'
         )
-        subtitle.pack(anchor="w", padx=15, pady=(0, 5))
+        banner.pack(fill="x", padx=15, pady=(0, 10))
+    
+    def _build_path_selectors(self, parent, pad):
+        """Build path selection UI"""
+        # Game saves folder
+        frame = tk.Frame(parent, bg=self.config.COLORS['bg_light'])
+        frame.pack(fill="x", **pad)
         
-        # WARNING BANNER - BACKUP REMINDER
-        warning_frame = tk.Frame(container, bg='#FFE5E5', bd=2, relief="solid")
-        warning_frame.pack(fill="x", padx=15, pady=10)
-        
-        warning_icon = tk.Label(
-            warning_frame,
-            text="⚠️",
-            font=("Arial", 28),
-            bg='#FFE5E5',
-            fg='#C74440'
-        )
-        warning_icon.pack(side="left", padx=10, pady=5)
-        
-        warning_text = tk.Label(
-            warning_frame,
-            text="IMPORTANT: The tool creates automatic backups, but it's recommended\nto manually backup your saves before proceeding for extra safety!",
-            font=("Georgia", 11, "bold"),
-            bg='#FFE5E5',
-            fg='#8B0000',
-            justify="left"
-        )
-        warning_text.pack(side="left", padx=5, pady=8)
-
-        # VERSION COMPATIBILITY WARNING
-        compat_frame = tk.Frame(container, bg='#FFF9E6', bd=2, relief="solid")
-        compat_frame.pack(fill="x", padx=15, pady=(0, 10))
-        
-        compat_icon = tk.Label(
-            compat_frame,
-            text="⚡",
-            font=("Arial", 28),
-            bg='#FFF9E6',
-            fg='#F57C00'
-        )
-        compat_icon.pack(side="left", padx=10, pady=5)
-        
-        compat_content = tk.Frame(compat_frame, bg='#FFF9E6')
-        compat_content.pack(side="left", fill="x", expand=True, padx=5, pady=8)
-        
-        tk.Label(
-            compat_content,
-            text="Version Compatibility Warning:",
-            font=("Georgia", 12, "bold"),
-            bg='#FFF9E6',
-            fg=COLORS['text'],
-            justify="left"
-        ).pack(anchor="w", pady=(0, 5))
-        
-        tk.Label(
-            compat_content,
-            text="⚠️ IMPORTANT: Before syncing, verify that your PC and Mobile versions match!\nMobile updates often lag behind PC. Using incompatible versions may corrupt saves.",
-            font=("Georgia", 10, "bold"),
-            bg='#FFF9E6',
-            fg='#BF360C',
-            justify="left",
-            wraplength=750
-        ).pack(anchor="w")
-
-        # Game Saves
-        frm1 = tk.Frame(container, bg=COLORS['bg_light'])
-        frm1.pack(fill="x", **pad)
-
-        label1 = tk.Label(
-            frm1, 
-            text="📁 Game Saves Folder (the 'Saves' folder inside StardewValley):",
-            font=("Georgia", 16, "bold"),
-            fg=COLORS['text'],
-            bg=COLORS['bg_light']
-        )
-        label1.pack(anchor="w")
-        
-        hint1 = tk.Label(
-            frm1,
-            text="💡 Select the folder where Stardew Valley stores your save files",
-            font=("Georgia", 12, "italic"),
-            fg=COLORS['primary_dark'],
-            bg=COLORS['bg_light']
-        )
-        hint1.pack(anchor="w", padx=5, pady=(2,5))
-        
-        row1 = tk.Frame(frm1, bg=COLORS['bg_light'])
-        row1.pack(fill="x", pady=5)
-        e1 = tk.Entry(
-            row1, 
-            textvariable=self.game_saves_var,
-            font=("Courier", 11),
-            bg='#FFFACD',
-            fg=COLORS['text'],
-            relief="solid",
-            bd=1
-        )
-        e1.pack(side="left", fill="x", expand=True)
-        
-        btn1 = tk.Button(
-            row1, 
-            text="Choose…",
-            command=self.pick_game_saves,
-            font=("Georgia", 11, "bold"),
-            bg=COLORS['button'],
-            fg=COLORS['button_text'],
-            activebackground=COLORS['button_hover'],
-            activeforeground=COLORS['button_text'],
-            relief="solid",
-            bd=2,
-            cursor="hand2",
-            padx=20,
-            pady=10
-        )
-        btn1.pack(side="left", padx=8)
-
-        # Cloud Root
-        frm2 = tk.Frame(container, bg=COLORS['bg_light'])
-        frm2.pack(fill="x", **pad)
-
-        label2 = tk.Label(
-            frm2, 
-            text="☁️ Cloud Folder (your cloud sync folder, e.g., iCloud/OneDrive):",
-            font=("Georgia", 16, "bold"),
-            fg=COLORS['text'],
-            bg=COLORS['bg_light']
-        )
-        label2.pack(anchor="w")
-        
-        hint2 = tk.Label(
-            frm2,
-            text="💡 The tool will automatically create a 'Saves' subfolder here",
-            font=("Georgia", 12, "italic"),
-            fg=COLORS['primary_dark'],
-            bg=COLORS['bg_light']
-        )
-        hint2.pack(anchor="w", padx=5, pady=(2,5))
-        
-        row2 = tk.Frame(frm2, bg=COLORS['bg_light'])
-        row2.pack(fill="x", pady=5)
-        e2 = tk.Entry(
-            row2, 
-            textvariable=self.cloud_root_var,
-            font=("Courier", 11),
-            bg='#FFFACD',
-            fg=COLORS['text'],
-            relief="solid",
-            bd=1
-        )
-        e2.pack(side="left", fill="x", expand=True)
-        
-        btn2 = tk.Button(
-            row2, 
-            text="Choose…",
-            command=self.pick_cloud_root,
-            font=("Georgia", 11, "bold"),
-            bg=COLORS['button'],
-            fg=COLORS['button_text'],
-            activebackground=COLORS['button_hover'],
-            activeforeground=COLORS['button_text'],
-            relief="solid",
-            bd=2,
-            cursor="hand2",
-            padx=20,
-            pady=10
-        )
-        btn2.pack(side="left", padx=8)
-
-        # Preview target
-        frm3 = tk.Frame(container, bg=COLORS['bg_light'])
-        frm3.pack(fill="x", **pad)
-
-        tk.Label(
-            frm3, 
-            text="Cloud Target (auto-generated):",
-            font=("Georgia", 16, "bold"),
-            fg=COLORS['text'],
-            bg=COLORS['bg_light']
+        self.widget_factory.create_label(
+            frame, "📁 Game Saves Folder (the 'Saves' folder inside StardewValley):"
         ).pack(anchor="w")
         
-        row3 = tk.Frame(frm3, bg=COLORS['bg_light'])
-        row3.pack(fill="x", pady=5)
-        e3 = tk.Entry(
-            row3, 
-            textvariable=self.cloud_saves_var, 
-            state="readonly",
-            font=("Courier", 11),
-            bg='#E8E8E8',
-            fg=COLORS['text'],
-            relief="solid",
-            bd=1
+        self.widget_factory.create_label(
+            frame, "💡 Select the folder where Stardew Valley stores your save files",
+            'hint', fg=self.config.COLORS['primary_dark']
+        ).pack(anchor="w", padx=5, pady=(2, 5))
+        
+        row = tk.Frame(frame, bg=self.config.COLORS['bg_light'])
+        row.pack(fill="x", pady=5)
+        
+        self.widget_factory.create_entry(row, self.game_saves_var).pack(
+            side="left", fill="x", expand=True
         )
-        e3.pack(side="left", fill="x", expand=True)
-
+        self.widget_factory.create_button(
+            row, "Choose…", self._pick_game_saves, 'small'
+        ).pack(side="left", padx=8)
+        
+        # Cloud folder
+        frame = tk.Frame(parent, bg=self.config.COLORS['bg_light'])
+        frame.pack(fill="x", **pad)
+        
+        self.widget_factory.create_label(
+            frame, "☁️ Cloud Folder (your cloud sync folder, e.g., iCloud/OneDrive):"
+        ).pack(anchor="w")
+        
+        self.widget_factory.create_label(
+            frame, "💡 The tool will automatically create a 'Saves' subfolder here",
+            'hint', fg=self.config.COLORS['primary_dark']
+        ).pack(anchor="w", padx=5, pady=(2, 5))
+        
+        row = tk.Frame(frame, bg=self.config.COLORS['bg_light'])
+        row.pack(fill="x", pady=5)
+        
+        self.widget_factory.create_entry(row, self.cloud_root_var).pack(
+            side="left", fill="x", expand=True
+        )
+        self.widget_factory.create_button(
+            row, "Choose…", self._pick_cloud_root, 'small'
+        ).pack(side="left", padx=8)
+        
+        # Cloud target (readonly)
+        frame = tk.Frame(parent, bg=self.config.COLORS['bg_light'])
+        frame.pack(fill="x", **pad)
+        
+        self.widget_factory.create_label(
+            frame, "Cloud Target (auto-generated):"
+        ).pack(anchor="w")
+        
+        self.widget_factory.create_entry(
+            frame, self.cloud_saves_var, readonly=True
+        ).pack(fill="x", pady=5)
+    
+    def _build_actions(self, parent, pad):
+        """Build action buttons"""
         # Separator
-        sep = tk.Frame(container, height=2, bg=COLORS['primary'], relief="sunken")
-        sep.pack(fill="x", padx=15, pady=15)
-
-        # Action buttons section
-        actions_frame = tk.Frame(container, bg=COLORS['bg_light'])
-        actions_frame.pack(fill="x", **pad)
+        tk.Frame(parent, height=2, bg=self.config.COLORS['primary'], 
+                relief="sunken").pack(fill="x", padx=15, pady=15)
         
-        # Instructions
-        tk.Label(
-            actions_frame,
-            text="Choose your action:",
-            font=("Georgia", 14, "bold"),
-            fg=COLORS['text'],
-            bg=COLORS['bg_light']
+        actions = tk.Frame(parent, bg=self.config.COLORS['bg_light'])
+        actions.pack(fill="x", **pad)
+        
+        self.widget_factory.create_label(
+            actions, "Choose your action:", font_key='label'
         ).pack(anchor="w", pady=(0, 5))
         
-        tk.Label(
-            actions_frame,
-            text="• Copy Only: backup to cloud without linking  •  Link to Cloud: full sync setup (recommended)",
-            font=("Georgia", 11, "italic"),
-            fg=COLORS['primary_dark'],
-            bg=COLORS['bg_light']
+        self.widget_factory.create_label(
+            actions, 
+            "• Copy Only: backup to cloud without linking  •  Link to Cloud: full sync setup (recommended)",
+            'hint', fg=self.config.COLORS['primary_dark']
         ).pack(anchor="w", pady=(0, 10))
-
-        # Main action buttons
-        frm4 = tk.Frame(actions_frame, bg=COLORS['bg_light'])
-        frm4.pack(fill="x", pady=(0, 10))
-
-        main_buttons = [
-            ("📋 Copy to Cloud Only", self.migrate_to_cloud, COLORS['bg_dark'], COLORS['primary_dark']),
-            ("🔗 Link to Cloud", self.link_game_to_cloud, COLORS['primary_dark'], COLORS['primary_dark']),
-        ]
         
-        for text, command, bg_color, fg_color in main_buttons:
-            btn = tk.Button(
-                frm4, 
-                text=text,
-                command=command,
-                font=("Georgia", 13, "bold"),
-                bg=bg_color,
-                fg=fg_color,
-                activebackground=COLORS['button_hover'],
-                activeforeground=COLORS['button_text'],
-                relief="solid",
-                bd=2,
-                cursor="hand2",
-                padx=15,
-                pady=12
-            )
-            btn.pack(side="left", padx=5, expand=True, fill="x")
+        # Main buttons
+        button_row = tk.Frame(actions, bg=self.config.COLORS['bg_light'])
+        button_row.pack(fill="x", pady=(0, 10))
         
-        # Restore button (separate, less prominent)
-        frm5 = tk.Frame(actions_frame, bg=COLORS['bg_light'])
-        frm5.pack(fill="x")
+        self.widget_factory.create_button(
+            button_row, "📋 Copy to Cloud Only", self._migrate_to_cloud, 'secondary'
+        ).pack(side="left", padx=5, expand=True, fill="x")
         
-        restore_btn = tk.Button(
-            frm5,
-            text="♻️ Restore from Backup",
-            command=self.restore_backup,
-            font=("Georgia", 11),
-            bg=COLORS['bg'],
-            fg=COLORS['primary_dark'],
-            activebackground=COLORS['bg_dark'],
-            activeforeground=COLORS['primary_dark'],
-            relief="solid",
-            bd=2,
-            cursor="hand2",
-            padx=15,
-            pady=8
-        )
-        restore_btn.pack(side="right", padx=5)
-
-        # Status / Logs
-        tk.Label(
-            container, 
-            text="Status Log:",
-            font=("Georgia", 12, "bold"),
-            fg=COLORS['text'],
-            bg=COLORS['bg_light']
+        self.widget_factory.create_button(
+            button_row, "🔗 Link to Cloud", self._link_to_cloud, 'primary'
+        ).pack(side="left", padx=5, expand=True, fill="x")
+        
+        # Restore button
+        restore_row = tk.Frame(actions, bg=self.config.COLORS['bg_light'])
+        restore_row.pack(fill="x")
+        
+        self.widget_factory.create_button(
+            restore_row, "♻️ Restore from Backup", self._restore_backup, 'restore'
+        ).pack(side="right", padx=5)
+    
+    def _build_log(self, parent):
+        """Build log area"""
+        self.widget_factory.create_label(
+            parent, "Status Log:", font_key='hint'
         ).pack(anchor="w", padx=15, pady=(15, 5))
         
-        log_frame = tk.Frame(container, bg=COLORS['bg_light'])
+        log_frame = tk.Frame(parent, bg=self.config.COLORS['bg_light'])
         log_frame.pack(fill="both", expand=True, padx=15, pady=(0, 15))
         
         self.log = tk.Text(
-            log_frame, 
-            height=10, 
-            wrap="word",
-            font=("Courier", 10),
-            bg='#FFFEF0',
-            fg=COLORS['text'],
-            relief="solid",
-            bd=1,
-            highlightthickness=0
+            log_frame, height=10, wrap="word",
+            font=self.config.FONTS['log'],
+            bg='#FFFEF0', fg=self.config.COLORS['text'],
+            relief="solid", bd=1, highlightthickness=0
         )
         scrollbar = tk.Scrollbar(log_frame, command=self.log.yview)
         self.log.config(yscrollcommand=scrollbar.set)
@@ -632,168 +932,146 @@ class App(tk.Tk):
         self.log.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
         
-        self._log(self.status_var.get())
-
-        self.backup_path: Path | None = None
-
-    def _auto_detect_saves(self):
-        """Auto-detect game saves path and populate field if found"""
-        # Check for game installation first
+        self._log(self.game_detector.get_platform_hint())
+    
+    def _log(self, message: str):
+        """Log message to text widget"""
+        self.log.insert("end", message + "\n")
+        self.log.see("end")
+    
+    def _auto_detect(self):
+        """Auto-detect game installation and saves"""
+        # Detect installation
         try:
-            game_path = find_game_installation()
+            game_path = self.game_detector.find_installation()
             if game_path:
-                self._log(f"[GAME FOUND] Stardew Valley installed at: {game_path}")
+                self._log(f"[AUTO-DETECT] Game found at: {game_path}")
             else:
-                self._log("[INFO] Stardew Valley installation not auto-detected.")
                 messagebox.showwarning(
-                    APP_TITLE,
-                    "Game Not Detected\n\n"
-                    "Stardew Valley may not be installed or might be installed in a non-standard location.\n\n"
-                    "The tool will still work if you manually select your saves folder."
+                    self.config.APP_TITLE,
+                    "Stardew Valley installation not detected.\n\n"
+                    "The tool will still work, but you'll need to manually select paths.\n"
+                    "Make sure the game is installed before syncing saves."
                 )
         except Exception as e:
-            self._log(f"[WARNING] Error during game detection: {e}")
+            self._log(f"[WARNING] Game detection error: {e}")
         
-        # Then check for saves
-        detected_path = find_game_saves_path()
-        if detected_path:
-            self.game_saves_var.set(str(detected_path))
-            self._log(f"[AUTO-DETECT] Found game saves at: {detected_path}")
-            self._recompute_cloud_saves()
+        # Detect saves
+        saves_path = self.game_detector.find_saves_path()
+        if saves_path:
+            self.game_saves_var.set(str(saves_path))
+            self._log(f"[AUTO-DETECT] Saves found at: {saves_path}")
+            self._recompute_cloud_target()
         else:
-            self._log("[INFO] Game saves not auto-detected. Please select manually.")
-
-    def _recompute_cloud_saves(self):
+            self._log("[INFO] Saves not auto-detected. Select manually.")
+    
+    def _recompute_cloud_target(self):
+        """Recompute cloud saves path"""
         cloud_root = self.cloud_root_var.get().strip()
         if cloud_root:
-            self.cloud_saves_var.set(norm(str(Path(cloud_root) / "Saves")))
+            self.cloud_saves_var.set(FileOperations.normalize_path(
+                str(Path(cloud_root) / "Saves")
+            ))
         else:
             self.cloud_saves_var.set("")
-
-    def _log(self, msg: str):
-        self.log.insert("end", msg + "\n")
-        self.log.see("end")
-
-    def pick_game_saves(self):
+    
+    def _pick_game_saves(self):
+        """Pick game saves folder"""
         path = filedialog.askdirectory(title="Select the game Saves folder")
         if path:
-            self.game_saves_var.set(norm(path))
-            self._recompute_cloud_saves()
-
-    def pick_cloud_root(self):
-        path = filedialog.askdirectory(title="Select the Cloud folder (project root)")
+            self.game_saves_var.set(FileOperations.normalize_path(path))
+            self._recompute_cloud_target()
+    
+    def _pick_cloud_root(self):
+        """Pick cloud root folder"""
+        path = filedialog.askdirectory(title="Select the Cloud folder")
         if path:
-            self.cloud_root_var.set(norm(path))
-            self._recompute_cloud_saves()
-
-    def _validate_paths(self):
+            self.cloud_root_var.set(FileOperations.normalize_path(path))
+            self._recompute_cloud_target()
+    
+    def _validate_paths(self) -> tuple[Path, Path, Path]:
+        """Validate selected paths"""
         game_saves = self.game_saves_var.get().strip()
         cloud_root = self.cloud_root_var.get().strip()
         cloud_saves = self.cloud_saves_var.get().strip()
-
+        
         if not game_saves or not cloud_root:
-            raise ValueError("Select both the game Saves folder and the Cloud folder.")
-        if not path_exists(game_saves):
-            raise ValueError("The game Saves folder does not exist.")
-        if not path_exists(cloud_root):
-            raise ValueError("The Cloud folder does not exist.")
+            raise ValueError("Select both game Saves and Cloud folders")
+        if not FileOperations.path_exists(game_saves):
+            raise ValueError("Game Saves folder doesn't exist")
+        if not FileOperations.path_exists(cloud_root):
+            raise ValueError("Cloud folder doesn't exist")
         if not cloud_saves:
-            raise ValueError("Invalid cloud target.")
-
+            raise ValueError("Invalid cloud target")
+        
         return Path(game_saves), Path(cloud_root), Path(cloud_saves)
-
-    def migrate_to_cloud(self):
+    
+    def _migrate_to_cloud(self):
+        """Execute migrate command"""
         try:
             game_saves, _, cloud_saves = self._validate_paths()
-
-            self._log(f"[MIGRATE] Game Saves: {game_saves}")
-            self._log(f"[MIGRATE] Cloud Saves: {cloud_saves}")
-
-            ensure_dir(str(cloud_saves))
-
-            # Copy local Saves content to cloud
-            copy_contents(game_saves, cloud_saves, overwrite=True)
-            self._log("[OK] Copy to cloud completed (overwrite).")
-
-            messagebox.showinfo(APP_TITLE, "Migration completed: local Saves have been copied to the cloud.")
-        except Exception as e:
-            messagebox.showerror(APP_TITLE, str(e))
-            self._log(f"[ERROR] {e}")
-
-    def link_game_to_cloud(self):
-        try:
-            game_saves, _, cloud_saves = self._validate_paths()
-
-            self._log(f"[LINK] Game Saves: {game_saves}")
-            self._log(f"[LINK] Cloud Saves: {cloud_saves}")
-
-            # Check if game_saves is already a link/junction
-            if is_link(game_saves) or is_junction_windows(game_saves):
-                raise RuntimeError("The game Saves folder appears to already be a link/junction. If you want to redo it, restore first.")
-
-            # Ensure cloud folder exists
-            ensure_dir(str(cloud_saves))
-            self._log("[INFO] Preparing cloud/Saves folder.")
-
-            # IMPORTANT: Copy saves to cloud BEFORE removing local folder
-            self._log("[MIGRATE] Copying saves to cloud...")
-            copy_contents(game_saves, cloud_saves, overwrite=True)
-            self._log("[OK] Saves migrated to cloud.")
-
-            # Backup local Saves (entire folder)
-            backups_root = Path.home() / "StardewValleyCrossSaves_Backups"
-            self.backup_path = backup_folder(game_saves, backups_root)
-            self._log(f"[BACKUP] Backup created at: {self.backup_path}")
-
-            # Remove original Saves folder
-            remove_path(game_saves)
-            self._log("[INFO] Removed original Saves folder (after backup and migration).")
-
-            # Create link -> cloud_saves
-            if is_windows():
-                create_junction_windows(game_saves, cloud_saves)
-                self._log("[OK] Created junction (mklink /J).")
+            
+            command = MigrateCommand(game_saves, cloud_saves, self._log)
+            result = command.execute()
+            
+            if result.success:
+                messagebox.showinfo(self.config.APP_TITLE, result.message)
             else:
-                create_symlink_dir(game_saves, cloud_saves)
-                self._log("[OK] Created symlink (os.symlink).")
-
-            messagebox.showinfo(APP_TITLE, "Link created!\nYour saves have been migrated to the cloud and Stardew will now use them from there.")
+                messagebox.showerror(self.config.APP_TITLE, result.message)
         except Exception as e:
-            messagebox.showerror(APP_TITLE, str(e))
+            messagebox.showerror(self.config.APP_TITLE, str(e))
             self._log(f"[ERROR] {e}")
-
-    def restore_backup(self):
+    
+    def _link_to_cloud(self):
+        """Execute link command"""
+        try:
+            game_saves, _, cloud_saves = self._validate_paths()
+            
+            command = LinkCommand(game_saves, cloud_saves, self.link_strategy, 
+                                self.config, self._log)
+            result = command.execute()
+            
+            if result.success:
+                self.last_backup = result.backup_path
+                messagebox.showinfo(self.config.APP_TITLE, result.message)
+            else:
+                messagebox.showerror(self.config.APP_TITLE, result.message)
+        except Exception as e:
+            messagebox.showerror(self.config.APP_TITLE, str(e))
+            self._log(f"[ERROR] {e}")
+    
+    def _restore_backup(self):
+        """Execute restore command"""
         try:
             game_saves = self.game_saves_var.get().strip()
             if not game_saves:
-                raise ValueError("Select the game Saves folder first.")
-            game_saves_p = Path(game_saves)
-
-            if not self.backup_path or not self.backup_path.exists():
-                raise RuntimeError("No backup in memory. If you have a backup, restore it manually from ~/StardewValleyCrossSaves_Backups")
-
-            self._log(f"[RESTORE] Restoring from: {self.backup_path}")
-
-            # Remove current link/junction or folder
-            if game_saves_p.exists():
-                remove_path(game_saves_p)
-                self._log("[INFO] Removed current Saves (link or folder).")
-
-            # Restore backup
-            shutil.copytree(self.backup_path, game_saves_p)
-            self._log("[OK] Backup restored to original location.")
-
-            messagebox.showinfo(APP_TITLE, "Restore completed: original Saves are back to local.")
+                raise ValueError("Select game Saves folder first")
+            
+            command = RestoreCommand(Path(game_saves), self.last_backup, 
+                                   self.link_strategy, self._log)
+            result = command.execute()
+            
+            if result.success:
+                messagebox.showinfo(self.config.APP_TITLE, result.message)
+            else:
+                messagebox.showerror(self.config.APP_TITLE, result.message)
         except Exception as e:
-            messagebox.showerror(APP_TITLE, str(e))
+            messagebox.showerror(self.config.APP_TITLE, str(e))
             self._log(f"[ERROR] {e}")
 
+
+# ============================================================================
+# ENTRY POINT
+# ============================================================================
+
 def main():
+    """Application entry point"""
     try:
-        app = App()
+        app = StardewCrossSaveApp()
         app.mainloop()
     except KeyboardInterrupt:
         pass
+
 
 if __name__ == "__main__":
     main()

@@ -18,10 +18,108 @@ This is a cross-platform GUI application for syncing Stardew Valley save files a
 - **Image Processing**: Pillow (PIL) for logo and background
 - **Build**: PyInstaller for creating standalone executables
 - **Platform Support**: macOS, Windows, Linux
+- **Architecture**: SOLID principles, Design Patterns (Strategy, Factory, Command, Singleton, Facade, Template Method)
+
+## Architecture Principles
+
+### Design Patterns Implemented
+
+**`app.py`**: Professional architecture with design patterns and SOLID principles
+
+1. **Singleton Pattern** - `Config` class for centralized configuration
+2. **Strategy Pattern** - `LinkStrategy` for platform-specific operations (symlinks vs junctions)
+3. **Factory Pattern** - `PlatformFactory`, `WidgetFactory` for object creation
+4. **Command Pattern** - `MigrateCommand`, `LinkCommand`, `RestoreCommand` for undoable operations
+5. **Facade Pattern** - `FileOperations` for simplified file system access
+6. **Template Method** - UI building structured in steps
+
+### SOLID Principles
+
+- **S** (Single Responsibility): Each class has one focused purpose
+  - `Config` → Configuration only
+  - `LinkStrategy` → Link operations only
+  - `FileOperations` → File operations only
+  - `GameDetectionService` → Detection only
+  - `WidgetFactory` → Widget creation only
+
+- **O** (Open/Closed): Extensible without modification
+  - New platforms: Add new `LinkStrategy` subclass
+  - New commands: Add new `Command` subclass
+
+- **L** (Liskov Substitution): Strategies are interchangeable
+  - `SymlinkStrategy` and `JunctionStrategy` can be swapped
+
+- **I** (Interface Segregation): Small, focused interfaces
+  - `LinkStrategy`: 3 methods only
+  - `PathDetector`: 2 methods only
+  - `Command`: 3 methods only
+
+- **D** (Dependency Inversion): Depends on abstractions
+  - App uses `LinkStrategy` interface, not concrete implementations
+
+### DRY (Don't Repeat Yourself)
+
+- `Config` singleton: Single source for colors, fonts, paths
+- `WidgetFactory`: Button/label/entry creation written once
+- `FileOperations.normalize_path()`: Used everywhere instead of duplicated
+- Platform detection centralized in `PlatformFactory`
+
+### KISS (Keep It Simple, Stupid)
+
+- Facade pattern hides complexity: `FileOperations.copy_contents()` vs manual logic
+- Strategy pattern eliminates nested if/elif: `strategy.create_link()`
+- Factory simplifies: `factory.create_button()` vs 10 lines of config
 
 ## Code Architecture
 
-### Main File: `app.py`
+### Main File
+
+**`app.py`**: Professional implementation (~1000 lines)
+- Entry Point: `main()` function
+- Main Class: `StardewCrossSaveApp(tk.Tk)` - UI coordinator with dependency injection
+- Architecture: Design patterns and SOLID principles throughout
+- Documentation: See [ARCHITECTURE.md](../ARCHITECTURE.md) for detailed documentation
+
+### Core Components
+
+```python
+Config (Singleton)
+├── COLORS: dict
+├── FONTS: dict
+└── PATHS: Path constants
+
+LinkStrategy (ABC)
+├── SymlinkStrategy (macOS/Linux)
+└── JunctionStrategy (Windows)
+
+Command (ABC)
+├── MigrateCommand
+├── LinkCommand
+└── RestoreCommand
+
+FileOperations (Facade)
+├── normalize_path()
+├── copy_contents()
+├── backup_folder()
+└── ensure_directory()
+
+PlatformFactory
+├── create_link_strategy()
+└── get_platform_name()
+
+WidgetFactory
+├── create_button()
+├── create_label()
+├── create_entry()
+└── create_warning_banner()
+
+GameDetectionService
+├── find_saves_path()
+├── find_installation()
+└── get_platform_hint()
+```
+
+### Original Architecture: `app.py`
 
 - **Entry Point**: `main()` function
 - **Main Class**: `App(tk.Tk)` - GUI application class

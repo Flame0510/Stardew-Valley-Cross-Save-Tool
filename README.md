@@ -25,6 +25,113 @@ The tool creates a symbolic link (or junction on Windows) from your local Starde
 3. Cloud storage automatically syncs saves across all your devices
 4. You can play on different computers and continue where you left off
 
+### Visual Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                      DESKTOP (Windows/Mac/Linux)                        │
+│                         ✅ AUTOMATIC SYNC                               │
+│  ┌──────────────────┐         ┌─────────────────────────────┐           │
+│  │  Stardew Valley  │         │   Game Saves Folder         │           │
+│  │      Game        │◄────────┤   (Symlink/Junction)        │           │
+│  │                  │ reads/  │                             │           │
+│  │  🎮 Playing...   │ writes  │   ~/StardewValley/Saves ────│┐          │
+│  └──────────────────┘         └─────────────────────────────┘│          │
+│                                            ▲                 │          │
+│                                            │                 │          │
+│                                            │ (symlink points │          │
+│                                            │  to cloud)      │          │
+│                                            ▼                 │          │
+│                               ┌────────────────────────────┐ │          │
+│                               │   Cloud Storage Folder     │ │          │
+│                               │                            │ │          │
+│                               │  📁 iCloud/OneDrive/       │ │          │
+│                               │     Dropbox/Saves/         │◄┘          │
+│                               │                            │            │
+│                               │  ├─ Farm1_123456/          │            │
+│                               │  ├─ Farm2_789012/          │            │
+│                               │  └─ SaveGameInfo           │            │
+│                               └────────────────────────────┘            │
+│                                            │                            │
+└────────────────────────────────────────────┼────────────────────────────┘
+                                             │
+                                             │ ☁️  Automatic Sync
+                                             │
+                    ┌────────────────────────┼────────────────────────┐
+                    │                        │                        │
+                    ▼                        ▼                        │
+    ┌───────────────────────────┐  ┌───────────────────────────┐      │
+    │   LAPTOP / OTHER PC       │  │   ANOTHER DESKTOP         │      │
+    │   ✅ AUTO SYNC            │  │   ✅ AUTO SYNC            │      │
+    │  ┌─────────────────────┐  │  │  ┌─────────────────────┐  │      │
+    │  │  Cloud Saves/  ◄────┼──┼──┼──┤  Cloud Saves/       │  │      │
+    │  │  (same files)       │  │  │  │  (same files)       │  │      │
+    │  └─────────────────────┘  │  │  └─────────────────────┘  │      │
+    │           ▲               │  │           ▲               │      │
+    │           │ symlink       │  │           │ symlink       │      │
+    │           ▼               │  │           ▼               │      │
+    │  ┌─────────────────────┐  │  │  ┌─────────────────────┐  │      │
+    │  │  Stardew Valley     │  │  │  │  Stardew Valley     │  │      │
+    │  │  🎮 Continue play   │  │  │  │  🎮 Same progress!  │  │      │
+    │  └─────────────────────┘  │  │  └─────────────────────┘  │      │
+    └───────────────────────────┘  └───────────────────────────┘      │
+                                                                      │
+                                                                      │
+                                                                      ▼
+                                           ┌──────────────────────────────────┐
+                                           │   MOBILE (iOS/Android)           │
+                                           │   ⚠️  MANUAL TRANSFER ONLY       │
+                                           │                                  │
+                                           │  ┌────────────────────────────┐  │
+                                           │  │  ☁️ Same Cloud Folder      │◄─┼─┐
+                                           │  │  (iCloud/OneDrive/Dropbox) │  │ │
+                                           │  │  Saves/                    │  │ │
+                                           │  └────────────────────────────┘  │ │
+                                           │              ▲                   │ │
+                                           │              │                   │ │
+                                           │              ├──► 📲 WIRELESS!   │ │
+                                           │              │    Copy files     │ │
+                                           │              │    via cloud app  │ │
+                                           │              ▼                   │ │
+                                           │  ┌────────────────────────────┐  │ │
+                                           │  │  Local Saves Folder        │  │ │
+                                           │  └────────────────────────────┘  │ │
+                                           │              │                   │ │
+                                           │              │ Game reads/writes │ │
+                                           │              │ directly here     │ │
+                                           │              ▼                   │ │
+                                           │  ┌────────────────────────────┐  │ │
+                                           │  │  Stardew Valley (Mobile)   │  │ │
+                                           │  │  📱 Playing on phone...    │  │ │
+                                           │  └────────────────────────────┘  │ │
+                                           └──────────────────────────────────┘ │
+                                                                                │
+                    ┌───────────────────────────────────────────────────────────┘
+                    │ Same cloud folder used by desktop!
+                    └─ You manually copy: Cloud ↔️ Local Saves (wirelessly via app)
+
+    ┌──────────────────────────────────────────────────────────────────────┐
+    │ 🚫 NINTENDO SWITCH / SWITCH 2                                        │
+    │    NOT SUPPORTED - Save files cannot be accessed externally          │
+    │    Nintendo's closed system prevents any save file transfer          │
+    └──────────────────────────────────────────────────────────────────────┘
+
+    ✨ Desktop: Automatic sync via cloud! ✨
+    📱 Mobile: Manual copy, but WIRELESS via same cloud folder (no cables!)
+    🚫 Switch: Not possible - hardware limitation
+```
+
+**Key Benefits:**
+- 🔗 **Transparent**: Game doesn't know saves are in the cloud
+- ☁️ **Automatic**: Cloud service handles all syncing (PC/Mac/Linux only)
+- 🔄 **Real-time**: Changes sync as you play on desktop
+- 🛡️ **Safe**: Original saves backed up before linking
+- 📱 **Mobile-friendly**: Access same cloud folder wirelessly via cloud app
+
+**Important Notes:**
+- 📱 **Mobile (iOS/Android)**: Manual copy required (symlinks not supported on mobile), BUT you still use the same cloud folder - just copy files wirelessly via iCloud/OneDrive/Dropbox app instead of cables!
+- 🎮 **Nintendo Switch**: Not supported - save files cannot be accessed externally
+
 ## 💻 System Requirements
 
 -   **Python 3.x** (3.8 or higher recommended)
@@ -77,7 +184,9 @@ pip3 install pillow
 python3 app.py
 ```
 
-## ⚠️ Important: Version Compatibility
+## ⚠️ Important: Version Compatibility & Platform Limitations
+
+### Version Compatibility
 
 **Before syncing saves between PC and Mobile:**
 
@@ -87,11 +196,37 @@ python3 app.py
 -   The tool displays a warning banner about this
 -   Always verify version compatibility before syncing!
 
+### Platform Support & Limitations
+
+✅ **Fully Supported (Automatic Sync):**
+-   **Windows** (Steam, GOG)
+-   **macOS** (Steam, GOG, App Store)
+-   **Linux** (Steam, Flatpak)
+
+⚠️ **Partially Supported (Manual Transfer Required):**
+-   **iOS/Android Mobile**: The tool works on PC/Mac/Linux only. For mobile devices:
+    -   Symlinks are not supported on mobile platforms
+    -   You must manually copy save files to/from your mobile device
+    -   **BUT**: You still use the SAME cloud folder! No cables needed - copy wirelessly via:
+        -   iCloud app (iOS/macOS)
+        -   OneDrive app (iOS/Android)
+        -   Dropbox app (iOS/Android)
+        -   Or any cloud service file manager app
+    -   This is still much easier than traditional USB cable transfer!
+    -   Be extra careful with version compatibility!
+
+❌ **Not Supported:**
+-   **Nintendo Switch / Switch 2**: Cloud save syncing is NOT possible
+    -   Nintendo's closed ecosystem prevents external save file access
+    -   Switch saves are locked to the console
+    -   No workaround available - this is a hardware/software limitation
+
 **The tool will:**
 
--   Detect if Stardew Valley is installed
+-   Detect if Stardew Valley is installed on your PC/Mac/Linux
 -   Show a warning if game is not found
 -   Alert you to manually verify version compatibility
+-   Only create symlinks/junctions on supported desktop platforms
 
 ## 📖 Usage
 
@@ -204,7 +339,8 @@ Features:
 
 ```
 Stardew Valley Cross-Save Tool/
-├── app.py                          # Main application
+├── app.py                          # Main application (with design patterns)
+├── ARCHITECTURE.md                 # Architecture & design patterns doc
 ├── build_macos.sh                  # macOS build script
 ├── build_windows.bat               # Windows build script
 ├── build_linux.sh                  # Linux build script
@@ -231,6 +367,42 @@ Stardew Valley Cross-Save Tool/
 -   **Image Processing**: Pillow (PIL)
 -   **Build Tool**: PyInstaller
 -   **Platform Detection**: Platform-specific symlink/junction handling
+
+## 🏗️ Architecture
+
+The application is built with **professional software engineering principles**: **SOLID**, **DRY (Don't Repeat Yourself)**, **KISS (Keep It Simple, Stupid)**, and implements proven **Design Patterns** from the Gang of Four:
+
+### Design Patterns Used
+
+-   **Singleton Pattern**: Configuration management (colors, fonts, paths)
+-   **Strategy Pattern**: Platform-specific operations (symlinks vs junctions)
+-   **Factory Pattern**: Consistent widget creation and platform detection
+-   **Command Pattern**: Undoable operations (migrate, link, restore)
+-   **Facade Pattern**: Simplified file operations interface
+-   **Template Method**: Structured UI building
+
+### SOLID Principles
+
+-   **S** - Single Responsibility: Each class has one focused purpose
+-   **O** - Open/Closed: Extensible without modification
+-   **L** - Liskov Substitution: Strategies are interchangeable
+-   **I** - Interface Segregation: Small, focused interfaces
+-   **D** - Dependency Inversion: Depends on abstractions, not implementations
+
+### Key Components
+
+```
+Config (Singleton)           → Application configuration
+LinkStrategy (Strategy)      → Platform-specific link operations
+PlatformFactory (Factory)    → Creates platform strategies
+WidgetFactory (Factory)      → Creates styled UI components
+FileOperations (Facade)      → Simplified file operations
+Command Pattern              → MigrateCommand, LinkCommand, RestoreCommand
+GameDetectionService         → Auto-detect game installation
+StardewCrossSaveApp          → Main UI coordinator
+```
+
+📚 For detailed architecture documentation, see [ARCHITECTURE.md](ARCHITECTURE.md)
 
 ## 🤝 Contributing
 
