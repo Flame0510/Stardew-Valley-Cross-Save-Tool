@@ -30,7 +30,7 @@ jobs:
 
       - name: Build Windows executable
         run: |
-          pyinstaller --windowed --name "Stardew Valley Cross-Save Tool" --add-data "assets;assets" --icon "assets\logo.ico" app.py --noconfirm
+          pyinstaller --windowed --name "Stardew Valley Cross-Save Tool" --add-data "assets;assets" --add-data "src;src" --icon "assets\logo.ico" main.py --noconfirm
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
@@ -59,8 +59,9 @@ jobs:
           pyinstaller --windowed \
                       --name "Stardew Valley Cross-Save Tool" \
                       --add-data "assets:assets" \
+                      --add-data "src:src" \
                       --icon "assets/logo.icns" \
-                      app.py --noconfirm
+                      main.py --noconfirm
 
       - name: Create PKG installer
         run: |
@@ -96,7 +97,8 @@ jobs:
                       --windowed \
                       --name "Stardew Valley Cross-Save Tool" \
                       --add-data "assets:assets" \
-                      app.py --noconfirm
+                      --add-data "src:src" \
+                      main.py --noconfirm
 
       - name: Make executable
         run: chmod +x "dist/Stardew Valley Cross-Save Tool"
