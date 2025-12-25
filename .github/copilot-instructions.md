@@ -4,6 +4,13 @@
 
 This is a cross-platform GUI application for syncing Stardew Valley save files across devices using cloud storage (iCloud, OneDrive, Dropbox, etc.). The tool creates symbolic links (macOS/Linux) or junctions (Windows) from the game's saves folder to a cloud-synced folder.
 
+**Key Updates (December 2025):**
+- Removed game version detection (too unreliable across platforms)
+- Kept game installation detection with warning if not found
+- Added version compatibility warning banner for PC/Mobile sync
+- Implemented GitHub Actions for automated multi-platform builds
+- Enhanced build scripts with permission management
+
 ## Technology Stack
 
 - **Language**: Python 3.x
@@ -33,6 +40,10 @@ This is a cross-platform GUI application for syncing Stardew Valley save files a
    - Remove original folder
    - Create symlink/junction pointing to cloud
 3. **Restore Backup**: Remove link and restore from backup
+4. **Auto-Detection**:
+   - `find_game_installation()` - Detects game installation (no version)
+   - `find_game_saves_path()` - Auto-finds saves folder
+   - Shows warning popup if game not found
 
 ## Design System
 
@@ -129,12 +140,47 @@ else:
 - Creates `.app` bundle with PyInstaller
 - Packages as `.pkg` installer with `pkgbuild`
 - Uses `assets/logo.icns` for app icon
+- **Permission Fixes**: Uses `find` with `chmod` to recursively fix permissions before cleanup
+- Error suppression: `2>/dev/null || true` for clean builds
 
 ### Windows: `build_windows.bat`
 
 - Creates standalone `.exe` with PyInstaller
 - Uses `assets\logo.ico` for app icon
+- **Permission Fixes**: Uses `attrib -r -h` to remove read-only/hidden flags before cleanup
+- Error suppression: `2>nul` on all removal commands
 - Suggests Inno Setup for professional installer
+
+### Linux: `build_linux.sh`
+
+- Creates single-file executable with PyInstaller `--onefile`
+- **Permission Fixes**: Same pattern as macOS (find + chmod)
+- Includes AppImage creation instructions
+- Error suppression for clean builds
+
+## GitHub Actions
+
+**File**: `.github/workflows/build.yml`
+
+**Trigger**: 
+- Push to tags matching `v*`
+- Manual workflow dispatch
+- Release creation
+
+**Jobs**:
+1. **build-windows**: Windows executable (runs-on: windows-latest)
+2. **build-macos**: macOS .app and .pkg (runs-on: macos-latest)
+3. **build-linux**: Linux standalone executable (runs-on: ubuntu-latest)
+4. **create-release**: Creates GitHub Release with ZIP artifacts (runs-on: ubuntu-latest)
+
+**Permissions**: `contents: write` (workflow and job level)
+
+**Release Action**: `ncipollo/release-action@v1` with `allowUpdates: true`
+
+**Artifacts**: ZIP archives uploaded to GitHub Releases:
+- `StardewCrossSave-Windows.zip`
+- `StardewCrossSave-macOS.zip`
+- `StardewCrossSave-Linux.zip`
 
 ## Coding Conventions
 
@@ -233,6 +279,8 @@ See `.gitignore`:
 2. **Junction Detection**: Windows junctions need special handling with `fsutil`
 3. **Backup Limitation**: Only one backup kept in `self.backup_path` (in memory)
 4. **macOS Permissions**: May require Full Disk Access for Library folder access
+5. **Version Detection Removed**: Game version detection removed (too unreliable). Users must manually verify PC/Mobile compatibility
+6. **Installation Detection**: Still detects game installation but doesn't extract version number
 
 ## Development Guidelines
 
