@@ -1,0 +1,139 @@
+name: Build Multi-Platform
+
+on:
+  push:
+    tags:
+      - 'v*'  # Trigger on version tags like v1.0.0
+  release:
+    types: [created]
+  workflow_dispatch:  # Allow manual trigger
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pillow pyinstaller
+
+      - name: Build Windows executable
+        run: |
+          pyinstaller --windowed --name "Stardew Valley Cross-Save Tool" --add-data "assets;assets" --icon "assets\logo.ico" app.py --noconfirm
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: dist/Stardew Valley Cross-Save Tool/
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          pip3 install pillow pyinstaller
+
+      - name: Build macOS application
+        run: |
+          pyinstaller --windowed \
+                      --name "Stardew Valley Cross-Save Tool" \
+                      --add-data "assets:assets" \
+                      --icon "assets/logo.icns" \
+                      app.py --noconfirm
+
+      - name: Create PKG installer
+        run: |
+          pkgbuild --component "dist/Stardew Valley Cross-Save Tool.app" \
+                   --install-location /Applications \
+                   "Stardew Valley Cross-Save Tool.pkg"
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-build
+          path: Stardew Valley Cross-Save Tool.pkg
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          pip3 install pillow pyinstaller
+
+      - name: Build Linux executable
+        run: |
+          pyinstaller --onefile \
+                      --windowed \
+                      --name "Stardew Valley Cross-Save Tool" \
+                      --add-data "assets:assets" \
+                      app.py --noconfirm
+
+      - name: Make executable
+        run: chmod +x "dist/Stardew Valley Cross-Save Tool"
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-build
+          path: dist/Stardew Valley Cross-Save Tool
+
+  create-release:
+    needs: [build-windows, build-macos, build-linux]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Create ZIP archives
+        run: |
+          cd windows-build
+          zip -r ../StardewCrossSave-Windows.zip .
+          cd ../macos-build
+          zip ../StardewCrossSave-macOS.zip "Stardew Valley Cross-Save Tool.pkg"
+          cd ../linux-build
+          zip ../StardewCrossSave-Linux.zip "Stardew Valley Cross-Save Tool"
+
+      - name: Create Release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "StardewCrossSave-Windows.zip,StardewCrossSave-macOS.zip,StardewCrossSave-Linux.zip"
+          draft: false
+          prerelease: false
+          allowUpdates: true
+          token: ${{ secrets.GITHUB_TOKEN }}
