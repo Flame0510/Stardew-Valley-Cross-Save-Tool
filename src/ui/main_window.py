@@ -6,6 +6,7 @@ from tkinter import filedialog, messagebox
 from typing import Optional
 from PIL import Image, ImageTk
 
+from .. import __version__
 from ..config import Config
 from ..strategies import PlatformFactory
 from ..detection import PathDetectorFactory, GameDetectionService
@@ -39,7 +40,7 @@ class StardewCrossSaveApp(tk.Tk):
     
     def _setup_window(self):
         """Configure main window"""
-        self.title(self.config.APP_TITLE)
+        self.title(f"{self.config.APP_TITLE} v{__version__}")
         self.geometry(f"{self.config.WINDOW_SIZE[0]}x{self.config.WINDOW_SIZE[1]}")
         self.minsize(*self.config.MIN_SIZE)
         self.configure(bg=self.config.COLORS['bg'])
