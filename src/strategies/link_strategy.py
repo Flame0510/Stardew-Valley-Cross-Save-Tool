@@ -49,8 +49,8 @@ class JunctionStrategy(LinkStrategy):
     """Strategy for Windows (junction points)"""
     
     def create_link(self, link_path: Path, target_path: Path) -> None:
-        cmd = ["cmd", "/c", "mklink", "/J", f'"{link_path}"', f'"{target_path}"']
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        cmd = ["cmd", "/c", "mklink", "/J", str(link_path), str(target_path)]
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding='cp850', errors='ignore')
         if result.returncode != 0:
             error_msg = result.stderr.strip() or result.stdout.strip() or "mklink failed"
             raise RuntimeError(f"Failed to create junction: {error_msg}")
@@ -60,7 +60,7 @@ class JunctionStrategy(LinkStrategy):
             return False
         try:
             cmd = ["cmd", "/c", "fsutil", "reparsepoint", "query", str(path)]
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding='cp850', errors='ignore')
             return result.returncode == 0
         except Exception:
             return False

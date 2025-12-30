@@ -183,7 +183,10 @@ class StardewCrossSaveApp(tk.Tk):
         )
         self.widget_factory.create_button(
             row, "Choose…", self._pick_game_saves, 'small'
-        ).pack(side="left", padx=8)
+        ).pack(side="left", padx=(8, 4))
+        self.widget_factory.create_button(
+            row, "📂 Open", lambda: self._open_folder(self.game_saves_var.get()), 'small'
+        ).pack(side="left", padx=(4, 8))
         
         # Cloud folder
         frame = tk.Frame(parent, bg=self.config.COLORS['bg_light'])
@@ -206,7 +209,10 @@ class StardewCrossSaveApp(tk.Tk):
         )
         self.widget_factory.create_button(
             row, "Choose…", self._pick_cloud_root, 'small'
-        ).pack(side="left", padx=8)
+        ).pack(side="left", padx=(8, 4))
+        self.widget_factory.create_button(
+            row, "📂 Open", lambda: self._open_folder(self.cloud_root_var.get()), 'small'
+        ).pack(side="left", padx=(4, 8))
         
         # Cloud target (readonly)
         frame = tk.Frame(parent, bg=self.config.COLORS['bg_light'])
@@ -406,3 +412,40 @@ class StardewCrossSaveApp(tk.Tk):
         except Exception as e:
             messagebox.showerror(self.config.APP_TITLE, str(e))
             self._log(f"[ERROR] {e}")
+    
+    def _open_folder(self, path: str):
+        """Open folder in file explorer"""
+        if not path or not path.strip():
+            messagebox.showwarning(self.config.APP_TITLE, "No path selected")
+            return
+        
+        folder_path = Path(path.strip())
+        
+        # Check if path exists
+        if not folder_path.exists():
+            messagebox.showerror(
+                self.config.APP_TITLE, 
+                f"Path does not exist:\n{folder_path}"
+            )
+            return
+        
+        # Open in file explorer
+        try:
+            import subprocess
+            import platform
+            
+            system = platform.system()
+            if system == "Windows":
+                subprocess.run(["explorer", str(folder_path)])
+            elif system == "Darwin":  # macOS
+                subprocess.run(["open", str(folder_path)])
+            else:  # Linux
+                subprocess.run(["xdg-open", str(folder_path)])
+            
+            self._log(f"[INFO] Opened folder: {folder_path}")
+        except Exception as e:
+            messagebox.showerror(
+                self.config.APP_TITLE, 
+                f"Failed to open folder:\n{e}"
+            )
+            self._log(f"[ERROR] Failed to open folder: {e}")
