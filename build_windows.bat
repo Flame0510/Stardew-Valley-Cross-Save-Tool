@@ -8,21 +8,27 @@ echo ==========================================
 echo.
 
 REM Check Python 3
-python --version >nul 2>&1
+python3 --version >nul 2>&1
 if errorlevel 1 (
-    echo [X] Python not found. Install Python 3 before continuing.
-    echo     Download from: https://www.python.org/downloads/
-    pause
-    exit /b 1
+    python --version >nul 2>&1
+    if errorlevel 1 (
+        echo [X] Python 3 not found. Install Python 3 before continuing.
+        echo     Download from: https://www.python.org/downloads/
+        pause
+        exit /b 1
+    )
+    set PYTHON_CMD=python
+) else (
+    set PYTHON_CMD=python3
 )
 
-echo [OK] Python found
-python --version
+echo [OK] Python 3 found
+%PYTHON_CMD% --version
 
 REM Install dependencies
 echo.
 echo [*] Installing dependencies...
-python -m pip install pillow pyinstaller --upgrade --quiet
+%PYTHON_CMD% -m pip install pillow pyinstaller --upgrade --quiet
 
 REM Clean previous builds
 echo.
